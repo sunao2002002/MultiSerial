@@ -1,0 +1,185 @@
+<UserControl x:Class="SerialApp.Desktop.Views.SerialPanelView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d">
+    <Border x:Name="PanelBorder"
+            Padding="6"
+            CornerRadius="12"
+            Background="{StaticResource SurfaceAltBrush}"
+            BorderThickness="2"
+            BorderBrush="{StaticResource SurfaceMutedBrush}">
+        <Border.Style>
+            <Style TargetType="Border">
+                <Setter Property="BorderBrush" Value="{StaticResource SurfaceMutedBrush}"/>
+                <Setter Property="Background" Value="{StaticResource SurfaceAltBrush}"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsActive}" Value="True">
+                        <Setter Property="BorderBrush" Value="{StaticResource ActivePanelBorderBrush}"/>
+                        <Setter Property="Background" Value="{StaticResource ActivePanelBackgroundBrush}"/>
+                        <Setter Property="BorderThickness" Value="4"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="0,0,0,4">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Row="0"
+                           Grid.Column="0"
+                           FontSize="15"
+                           FontWeight="SemiBold"
+                           Text="{Binding Title}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource ActivePanelBorderBrush}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <TextBox x:Name="LogPathTextBox"
+                         Grid.Row="0"
+                         Grid.Column="1"
+                         Margin="8,0,0,0"
+                         Padding="4,2"
+                         VerticalAlignment="Center"
+                         IsReadOnly="True"
+                         BorderThickness="1"
+                         FontSize="11"
+                         Cursor="Hand"
+                         ToolTip="双击用记事本打开日志"
+                         MouseDoubleClick="LogPathTextBox_MouseDoubleClick"
+                         Text="{Binding LogFilePath, Mode=OneWay}">
+                    <TextBox.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="用记事本打开" Click="OpenLogInNotepadMenuItem_Click"/>
+                            <MenuItem Header="打开所在文件夹" Click="OpenLogFolderMenuItem_Click"/>
+                        </ContextMenu>
+                    </TextBox.ContextMenu>
+                </TextBox>
+
+                <TextBlock Grid.Row="1"
+                           Grid.Column="0"
+                           Grid.ColumnSpan="2"
+                           Margin="0,2,0,0"
+                           FontSize="11"
+                           Text="{Binding StatusMessage}"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+            </Grid>
+
+            <Grid Grid.Row="1" Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center" Text="串口"/>
+                <ComboBox Grid.Column="1"
+                          MinWidth="360"
+                          Margin="0,0,10,0"
+                          ItemsSource="{Binding AvailablePorts}"
+                          SelectedValuePath="PortName"
+                          DisplayMemberPath="DisplayName"
+                          DropDownOpened="PortComboBox_DropDownOpened"
+                          SelectedValue="{Binding SelectedPortName, UpdateSourceTrigger=PropertyChanged}"/>
+
+                <TextBlock Grid.Column="2" Margin="0,0,8,0" VerticalAlignment="Center" Text="波特率"/>
+                <ComboBox Grid.Column="3"
+                          Width="120"
+                          Margin="0,0,10,0"
+                          IsEditable="True"
+                          ItemsSource="{Binding BaudRateOptions}"
+                          Text="{Binding BaudRateText, UpdateSourceTrigger=PropertyChanged}"/>
+
+                <Button Grid.Column="4"
+                        Width="80"
+                        Margin="0,0,10,0"
+                        Content="高级"
+                        Click="AdvancedSettingsButton_Click"/>
+
+                <Button Grid.Column="5"
+                        Width="96"
+                        Content="{Binding ConnectionButtonText}"
+                        Command="{Binding ToggleConnectionCommand}"/>
+            </Grid>
+
+            <TextBox x:Name="ReceiveTextBox"
+                     Grid.Row="2"
+                     Margin="0,0,0,8"
+                     IsReadOnly="True"
+                     Text="{Binding ReceiveText, Mode=OneWay}"
+                     TextWrapping="Wrap"
+                     VerticalScrollBarVisibility="Auto"
+                     HorizontalScrollBarVisibility="Auto"
+                     AcceptsReturn="True"
+                     FontFamily="Consolas"
+                     FontSize="13"/>
+
+                <StackPanel Grid.Row="3"
+                    Margin="0,0,0,6"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right">
+                <CheckBox Content="接收时间戳" IsChecked="{Binding ShowTimestamps}"/>
+                <CheckBox Content="接收 Hex 显示" IsChecked="{Binding ReceiveAsHex}"/>
+                <Button Width="88"
+                    Content="清空接收"
+                    Command="{Binding ClearReceiveCommand}"/>
+                </StackPanel>
+
+            <Grid Grid.Row="4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <ComboBox Grid.Column="0"
+                          Margin="0,0,12,0"
+                          IsEditable="True"
+                          ItemsSource="{Binding SendHistory}"
+                          SelectedItem="{Binding SelectedHistory, UpdateSourceTrigger=PropertyChanged}"
+                          Text="{Binding SendText, UpdateSourceTrigger=PropertyChanged}"
+                          FontFamily="Consolas"
+                          FontSize="13"
+                          IsTextSearchEnabled="False"/>
+
+                <WrapPanel Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center">
+                    <CheckBox Content="发送 Hex 模式" IsChecked="{Binding SendAsHex}"/>
+                    <CheckBox Content="字符发送追加 CRLF" IsChecked="{Binding AppendCrLfOnSend}"/>
+                </WrapPanel>
+
+                <Button Grid.Column="2"
+                        Width="110"
+                        Content="发送"
+                        Command="{Binding SendCommand}"/>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

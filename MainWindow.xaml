@@ -1,0 +1,109 @@
+﻿<Window x:Class="SerialApp.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:viewModels="clr-namespace:SerialApp.Desktop.ViewModels"
+        xmlns:views="clr-namespace:SerialApp.Desktop.Views"
+        mc:Ignorable="d"
+        Title="Serial App"
+        Icon="Assets/AppIcon.ico"
+        Width="1440"
+        Height="920"
+        MinWidth="1080"
+        MinHeight="720"
+        WindowStartupLocation="CenterScreen"
+        Closing="Window_Closing">
+    <Window.Resources>
+        <DataTemplate DataType="{x:Type viewModels:SerialPanelViewModel}">
+            <views:SerialPanelView/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type viewModels:SplitPanelNodeViewModel}">
+            <views:SplitPanelNodeView/>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource SurfaceMutedBrush}"
+                BorderThickness="1"
+                CornerRadius="12"
+                Padding="8,5"
+                Margin="0,0,0,8">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Left" Orientation="Vertical">
+                    <TextBlock Text="Serial App"
+                               FontSize="20"
+                               FontWeight="SemiBold"/>
+                </StackPanel>
+
+                <Menu DockPanel.Dock="Right"
+                      HorizontalAlignment="Right"
+                      VerticalAlignment="Center">
+                    <MenuItem Header="面板">
+                        <MenuItem Header="在右侧新增" Click="SplitRightMenuItem_Click"/>
+                        <MenuItem Header="在下方新增" Click="SplitDownMenuItem_Click"/>
+                        <Separator/>
+                        <MenuItem Header="关闭当前" Click="CloseCurrentMenuItem_Click"/>
+                    </MenuItem>
+                    <MenuItem Header="串口">
+                        <MenuItem Header="刷新全部串口" Click="RefreshPortsMenuItem_Click"/>
+                    </MenuItem>
+                    <MenuItem Header="设置">
+                        <MenuItem Header="选择日志目录" Click="SelectLogDirectoryMenuItem_Click"/>
+                        <MenuItem Header="恢复默认日志目录" Click="ResetLogDirectoryMenuItem_Click"/>
+                    </MenuItem>
+                    <MenuItem Header="帮助">
+                        <MenuItem Header="使用说明" Click="OpenHelpMenuItem_Click"/>
+                    </MenuItem>
+                    <MenuItem Header="应用">
+                        <MenuItem Header="退出" Click="ExitMenuItem_Click"/>
+                    </MenuItem>
+                </Menu>
+            </DockPanel>
+        </Border>
+
+        <Border Grid.Row="1"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource SurfaceMutedBrush}"
+                BorderThickness="1"
+                CornerRadius="16"
+                Padding="10">
+            <ContentControl Content="{Binding RootNode}"/>
+        </Border>
+
+        <Border Grid.Row="2"
+                Margin="0,8,0,0"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource SurfaceMutedBrush}"
+                BorderThickness="1"
+                CornerRadius="10"
+                Padding="8,5">
+            <DockPanel LastChildFill="True">
+                <TextBlock DockPanel.Dock="Right"
+                           Margin="10,0,0,0"
+                           VerticalAlignment="Center"
+                           FontSize="11"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           Text="{Binding PanelCount, StringFormat=Panels: {0}}"/>
+                <TextBlock DockPanel.Dock="Right"
+                           Margin="10,0,0,0"
+                           VerticalAlignment="Center"
+                           FontSize="11"
+                           Text="{Binding ActivePanelSummary}"/>
+                <TextBlock VerticalAlignment="Center"
+                           FontSize="11"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           Text="{Binding CurrentLogDirectory}"/>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>
