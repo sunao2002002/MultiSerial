@@ -24,6 +24,7 @@ public partial class SerialPanelView : System.Windows.Controls.UserControl
         AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler(HandlePanelPreviewMouseLeftButtonDown), true);
         DataContextChanged += SerialPanelView_DataContextChanged;
         Unloaded += SerialPanelView_Unloaded;
+        ReceiveMetaTextBox.PreviewMouseWheel += ReceiveMetaTextBox_PreviewMouseWheel;
         ReceiveMetaTextBox.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(ReceivePane_ScrollChanged));
         ReceiveDataTextBox.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(ReceivePane_ScrollChanged));
     }
@@ -211,6 +212,23 @@ public partial class SerialPanelView : System.Windows.Controls.UserControl
 
         ReceiveMetaTextBox.ScrollToEnd();
         ReceiveDataTextBox.ScrollToEnd();
+    }
+
+    private void ReceiveMetaTextBox_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        var dataScrollViewer = FindDescendant<ScrollViewer>(ReceiveDataTextBox);
+
+        if (dataScrollViewer is null)
+        {
+            return;
+        }
+
+        var nextOffset = e.Delta > 0
+            ? dataScrollViewer.VerticalOffset - SystemParameters.WheelScrollLines
+            : dataScrollViewer.VerticalOffset + SystemParameters.WheelScrollLines;
+
+        dataScrollViewer.ScrollToVerticalOffset(Math.Max(0, nextOffset));
+        e.Handled = true;
     }
 
     private void ReceivePane_ScrollChanged(object sender, ScrollChangedEventArgs e)
