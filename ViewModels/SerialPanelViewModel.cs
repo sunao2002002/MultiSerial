@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -402,9 +403,11 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
             var payload = BuildOutgoingPayload(SendText, SendAsHex, AppendCrLfOnSend);
             await _serialSession.SendAsync(payload);
             _appStateService.RememberSend(SendText);
-            var formatted = FormatOutgoingPayload(payload, SendAsHex);
-            AppendUiLine("TX", formatted, DateTime.Now);
-            await WriteLogAsync("TX", formatted, DateTime.Now);
+            var timestamp = DateTime.Now;
+            var displayPayload = FormatOutgoingPayloadForDisplay(payload, SendAsHex);
+            var logPayload = FormatOutgoingPayloadForLog(payload, SendAsHex);
+            AppendUiLine("TX", displayPayload, timestamp);
+            await WriteLogAsync("TX", logPayload, timestamp);
         }
         catch (Exception ex)
         {
@@ -508,38 +511,42 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
 
     private async Task FlushPendingReceiveAsync()
     {
-        var linesToLog = new List<string>();
+        if (_pendingReceiveFrames.IsEmpty && Volatile.Read(ref _droppedReceiveBytes) == 0)
+        {
+            return;
+        }
+
         var appendedText = new StringBuilder();
         var flushedBytes = 0;
+        long droppedBytes = 0;
 
-        while (flushedBytes < MaxBytesPerFlush && _pendingReceiveFrames.TryDequeue(out var frame))
+        await _logWriter.WriteBatchAsync(async writer =>
         {
-            Interlocked.Add(ref _pendingReceiveBytes, -frame.Buffer.Length);
-            flushedBytes += frame.Buffer.Length;
+            while (flushedBytes < MaxBytesPerFlush && _pendingReceiveFrames.TryDequeue(out var frame))
+            {
+                Interlocked.Add(ref _pendingReceiveBytes, -frame.Buffer.Length);
+                flushedBytes += frame.Buffer.Length;
 
-            var formattedPayload = FormatIncomingPayload(frame.Buffer);
-            appendedText.AppendLine(FormatUiLine("RX", formattedPayload, ShowTimestamps, frame.Timestamp));
-            linesToLog.Add(FormatLogLine("RX", formattedPayload, frame.Timestamp));
-        }
+                var formattedPayload = FormatIncomingPayload(frame.Buffer);
+                appendedText.AppendLine(FormatUiLine("RX", formattedPayload, ShowTimestamps, frame.Timestamp));
+                await writer.WriteLineAsync(FormatLogLine("RX", formattedPayload, frame.Timestamp));
+            }
 
-        var droppedBytes = Interlocked.Exchange(ref _droppedReceiveBytes, 0);
+            droppedBytes = Interlocked.Exchange(ref _droppedReceiveBytes, 0);
 
-        if (droppedBytes > 0)
-        {
-            var warning = $"接收缓存拥塞，丢弃 {droppedBytes} 字节";
-            appendedText.AppendLine(FormatUiLine("SYS", warning, ShowTimestamps, DateTime.Now));
-            linesToLog.Add(FormatLogLine("SYS", warning, DateTime.Now));
-        }
+            if (droppedBytes > 0)
+            {
+                var warningTimestamp = DateTime.Now;
+                var warning = $"接收缓存拥塞，丢弃 {droppedBytes} 字节";
+                appendedText.AppendLine(FormatUiLine("SYS", warning, ShowTimestamps, warningTimestamp));
+                await writer.WriteLineAsync(FormatLogLine("SYS", warning, warningTimestamp));
+            }
+        });
 
         if (appendedText.Length > 0)
         {
             _receiveTextBuilder.Append(appendedText);
             ReceiveText = TrimReceiveText(_receiveTextBuilder);
-        }
-
-        if (linesToLog.Count > 0)
-        {
-            await _logWriter.WriteLinesAsync(linesToLog);
         }
 
         if (droppedBytes > 0)
@@ -570,10 +577,22 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
             return string.Join(" ", payload.Select(value => value.ToString("X2", CultureInfo.InvariantCulture)));
         }
 
-        var charCount = _utf8Decoder.GetCharCount(payload, 0, payload.Length);
-        var chars = new char[charCount];
-        _utf8Decoder.GetChars(payload, 0, payload.Length, chars, 0);
-        return new string(chars);
+        if (payload.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var rentedChars = ArrayPool<char>.Shared.Rent(Encoding.UTF8.GetMaxCharCount(payload.Length));
+
+        try
+        {
+            _utf8Decoder.Convert(payload, 0, payload.Length, rentedChars, 0, rentedChars.Length, flush: false, out _, out var charsUsed, out _);
+            return new string(rentedChars, 0, charsUsed);
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(rentedChars);
+        }
     }
 
     private static string TrimReceiveText(StringBuilder builder)
@@ -605,7 +624,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
 
     private string FormatLogLine(string direction, string payload, DateTime timestamp)
     {
-        return $"[{timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{direction}] {payload}";
+        return $"[{timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{direction}] {SanitizePayloadForLog(payload)}";
     }
 
     private async Task WriteLogAsync(string direction, string payload, DateTime timestamp)
@@ -613,13 +632,81 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         await _logWriter.WriteLineAsync(FormatLogLine(direction, payload, timestamp));
     }
 
-    private static string FormatOutgoingPayload(byte[] payload, bool useHex)
+    private static string SanitizePayloadForLog(string payload)
+    {
+        if (string.IsNullOrEmpty(payload))
+        {
+            return payload;
+        }
+
+        StringBuilder? builder = null;
+
+        for (var index = 0; index < payload.Length; index++)
+        {
+            var character = payload[index];
+            var replacement = character switch
+            {
+                '\0' => "\\0",
+                '\r' => null,
+                '\n' => null,
+                '\t' => null,
+                _ when char.IsControl(character) => $"\\x{(int)character:X2}",
+                _ => null,
+            };
+
+            if (replacement is null)
+            {
+                builder?.Append(character);
+                continue;
+            }
+
+            builder ??= new StringBuilder(payload.Length + 8);
+            builder.Append(payload, 0, index);
+            builder.Append(replacement);
+
+            for (index++; index < payload.Length; index++)
+            {
+                character = payload[index];
+                replacement = character switch
+                {
+                    '\0' => "\\0",
+                    '\r' => null,
+                    '\n' => null,
+                    '\t' => null,
+                    _ when char.IsControl(character) => $"\\x{(int)character:X2}",
+                    _ => null,
+                };
+
+                if (replacement is null)
+                {
+                    builder.Append(character);
+                }
+                else
+                {
+                    builder.Append(replacement);
+                }
+            }
+
+            return builder.ToString();
+        }
+
+        return payload;
+    }
+
+    private static string FormatOutgoingPayloadForDisplay(byte[] payload, bool useHex)
     {
         return useHex
             ? string.Join(" ", payload.Select(value => value.ToString("X2", CultureInfo.InvariantCulture)))
             : Encoding.UTF8.GetString(payload)
                 .Replace("\r", "\\r", StringComparison.Ordinal)
                 .Replace("\n", "\\n", StringComparison.Ordinal);
+    }
+
+    private static string FormatOutgoingPayloadForLog(byte[] payload, bool useHex)
+    {
+        return useHex
+            ? string.Join(" ", payload.Select(value => value.ToString("X2", CultureInfo.InvariantCulture)))
+            : Encoding.UTF8.GetString(payload);
     }
 
     private static byte[] BuildOutgoingPayload(string content, bool useHex, bool appendCrLfOnSend)

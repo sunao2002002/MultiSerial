@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -8,6 +9,8 @@ namespace SerialApp.Desktop.Services;
 
 public sealed class PanelLogWriter : IAsyncDisposable
 {
+    private static readonly Encoding LogEncoding = new UTF8Encoding(true);
+
     private readonly int _panelIndex;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private string? _portName;
@@ -30,6 +33,7 @@ public sealed class PanelLogWriter : IAsyncDisposable
         try
         {
             await _writer.WriteLineAsync(message);
+            await _writer.FlushAsync();
         }
         finally
         {
@@ -47,6 +51,25 @@ public sealed class PanelLogWriter : IAsyncDisposable
             {
                 await _writer.WriteLineAsync(message);
             }
+
+            await _writer.FlushAsync();
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    public async Task WriteBatchAsync(Func<TextWriter, Task> writeBatchAsync)
+    {
+        ArgumentNullException.ThrowIfNull(writeBatchAsync);
+
+        await _writeLock.WaitAsync();
+
+        try
+        {
+            await writeBatchAsync(_writer);
+            await _writer.FlushAsync();
         }
         finally
         {
@@ -103,10 +126,16 @@ public sealed class PanelLogWriter : IAsyncDisposable
                 var fileName = $"panel-{_panelIndex:D2}{portSegment}-{DateTime.Now:yyyyMMdd-HHmmssfff}.log";
                 filePath = Path.Combine(candidateDirectory, fileName);
 
-                var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.Read);
-                return new StreamWriter(stream, new UTF8Encoding(false))
+                var stream = new FileStream(
+                    filePath,
+                    FileMode.Create,
+                    FileAccess.Write,
+                    FileShare.Read,
+                    bufferSize: 4096,
+                    FileOptions.Asynchronous | FileOptions.SequentialScan);
+                return new StreamWriter(stream, LogEncoding)
                 {
-                    AutoFlush = true,
+                    AutoFlush = false,
                 };
             }
             catch

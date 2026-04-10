@@ -2,6 +2,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Diagnostics;
 using System.IO;
+using System.Threading.Tasks;
 using SerialApp.Desktop.ViewModels;
 
 namespace SerialApp.Desktop.Views;
@@ -84,6 +85,25 @@ public partial class SerialPanelView : System.Windows.Controls.UserControl
         };
 
         Process.Start(startInfo);
+    }
+
+    private async void SendComboBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter
+            || Keyboard.Modifiers != ModifierKeys.None
+            || sender is not System.Windows.Controls.ComboBox comboBox
+            || comboBox.IsDropDownOpen)
+        {
+            return;
+        }
+
+        if (DataContext is not SerialPanelViewModel viewModel)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        await viewModel.SendAsync();
     }
 
     private void OpenLogInNotepad()

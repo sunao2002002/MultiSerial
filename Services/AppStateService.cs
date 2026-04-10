@@ -11,7 +11,7 @@ namespace SerialApp.Desktop.Services;
 
 public sealed class AppStateService
 {
-    private const int MaxHistoryCount = 16;
+    private const int MaxHistoryCount = 32;
 
     private readonly SemaphoreSlim _saveLock = new(1, 1);
     private readonly string _settingsFilePath;
