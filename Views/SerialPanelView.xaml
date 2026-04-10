@@ -130,29 +130,72 @@
                         Command="{Binding ToggleConnectionCommand}"/>
             </Grid>
 
-            <TextBox x:Name="ReceiveTextBox"
-                     Grid.Row="2"
-                     Margin="0,0,0,8"
-                     IsReadOnly="True"
-                     TextWrapping="Wrap"
-                     VerticalScrollBarVisibility="Auto"
-                     HorizontalScrollBarVisibility="Auto"
-                     AcceptsReturn="True"
-                     FontFamily="{Binding PanelTextFontFamily}"
-                     FontSize="{Binding PanelTextFontSize}"
-                     FontWeight="{Binding PanelTextFontWeight}"
-                     FontStyle="{Binding PanelTextFontStyle}"/>
+            <Border Grid.Row="2"
+                    Margin="0,0,0,8"
+                    CornerRadius="6"
+                    BorderThickness="1"
+                    BorderBrush="{StaticResource SurfaceMutedBrush}"
+                    Background="{StaticResource SurfaceBrush}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition x:Name="ReceiveMetaColumn" Width="90" MinWidth="68"/>
+                        <ColumnDefinition Width="5"/>
+                        <ColumnDefinition Width="*" MinWidth="180"/>
+                    </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Row="3"
-                    Margin="0,0,0,6"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right">
+                    <TextBox x:Name="ReceiveMetaTextBox"
+                             Grid.Column="0"
+                             Padding="6,4"
+                             IsReadOnly="True"
+                             BorderThickness="0"
+                             Background="Transparent"
+                             TextWrapping="NoWrap"
+                             VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Auto"
+                             AcceptsReturn="True"
+                             FontFamily="{Binding PanelTextFontFamily}"
+                             FontSize="{Binding PanelTextFontSize}"
+                             FontWeight="{Binding PanelTextFontWeight}"
+                             FontStyle="{Binding PanelTextFontStyle}"/>
+
+                    <GridSplitter Grid.Column="1"
+                                  Width="5"
+                                  HorizontalAlignment="Stretch"
+                                  VerticalAlignment="Stretch"
+                                  Background="{StaticResource SurfaceMutedBrush}"
+                                  ResizeBehavior="PreviousAndNext"
+                                  ShowsPreview="True"/>
+
+                    <Border Grid.Column="2"
+                            BorderThickness="1,0,0,0"
+                            BorderBrush="{StaticResource SurfaceMutedBrush}">
+                        <TextBox x:Name="ReceiveDataTextBox"
+                                 Padding="6,4"
+                                 IsReadOnly="True"
+                                 BorderThickness="0"
+                                 Background="Transparent"
+                                 TextWrapping="NoWrap"
+                                 VerticalScrollBarVisibility="Auto"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 AcceptsReturn="True"
+                                 FontFamily="{Binding PanelTextFontFamily}"
+                                 FontSize="{Binding PanelTextFontSize}"
+                                 FontWeight="{Binding PanelTextFontWeight}"
+                                 FontStyle="{Binding PanelTextFontStyle}"/>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <StackPanel Grid.Row="3"
+                        Margin="0,0,0,6"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right">
                 <CheckBox Content="接收时间戳" IsChecked="{Binding ShowTimestamps}"/>
                 <CheckBox Content="接收 Hex 显示" IsChecked="{Binding ReceiveAsHex}"/>
                 <Button Width="88"
-                    Content="清空接收"
-                    Command="{Binding ClearReceiveCommand}"/>
-                </StackPanel>
+                        Content="清空接收"
+                        Command="{Binding ClearReceiveCommand}"/>
+            </StackPanel>
 
             <Grid Grid.Row="4">
                 <Grid.ColumnDefinitions>

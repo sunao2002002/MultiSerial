@@ -4,13 +4,16 @@ namespace SerialApp.Desktop.ViewModels;
 
 public sealed class ReceiveTextChangedEventArgs : EventArgs
 {
-    public ReceiveTextChangedEventArgs(string text, bool replaceAll)
+    public ReceiveTextChangedEventArgs(string metadataText, string payloadText, bool replaceAll)
     {
-        Text = text;
+        MetadataText = metadataText;
+        PayloadText = payloadText;
         ReplaceAll = replaceAll;
     }
 
-    public string Text { get; }
+    public string MetadataText { get; }
+
+    public string PayloadText { get; }
 
     public bool ReplaceAll { get; }
 }

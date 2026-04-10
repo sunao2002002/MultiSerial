@@ -33,9 +33,12 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
     private readonly ConcurrentQueue<PendingReceiveFrame> _pendingReceiveFrames = new();
     private readonly PanelLogWriter _logWriter;
     private readonly SerialPortSession _serialSession;
-    private StringBuilder _receiveTextBuffer = new(MaxVisibleCharacters);
+    private readonly Queue<ReceiveDisplayChunk> _receiveDisplayChunks = new();
+    private StringBuilder _receiveMetadataBuffer = new(MaxVisibleCharacters / 2);
+    private StringBuilder _receivePayloadBuffer = new(MaxVisibleCharacters);
     private string? _lastUiDirection;
     private bool _isUiLineStart = true;
+    private int _receiveDisplayCharacterCount;
     private long _pendingReceiveBytes;
     private long _droppedReceiveBytes;
     private int _isFlushRunning;
@@ -516,10 +519,13 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
 
     public void ClearReceiveText()
     {
-        _receiveTextBuffer = new StringBuilder(MaxVisibleCharacters);
+        _receiveDisplayChunks.Clear();
+        _receiveMetadataBuffer = new StringBuilder(MaxVisibleCharacters / 2);
+        _receivePayloadBuffer = new StringBuilder(MaxVisibleCharacters);
+        _receiveDisplayCharacterCount = 0;
         _lastUiDirection = null;
         _isUiLineStart = true;
-        ReceiveTextChanged?.Invoke(this, new ReceiveTextChangedEventArgs(string.Empty, replaceAll: true));
+        ReceiveTextChanged?.Invoke(this, new ReceiveTextChangedEventArgs(string.Empty, string.Empty, replaceAll: true));
     }
 
     public async ValueTask DisposeAsync()
@@ -631,7 +637,8 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
             return;
         }
 
-        var appendedText = new StringBuilder();
+        var appendedMetadata = new StringBuilder();
+        var appendedPayload = new StringBuilder();
         var currentUiDirection = _lastUiDirection;
         var isUiLineStart = _isUiLineStart;
         var logLines = new List<string>();
@@ -644,7 +651,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
             flushedBytes += frame.Buffer.Length;
 
             var formattedPayload = FormatIncomingPayload(frame.Buffer);
-            AppendUiEntry(appendedText, ref currentUiDirection, ref isUiLineStart, "RX", formattedPayload, ShowTimestamps, frame.Timestamp);
+            AppendUiEntry(appendedMetadata, appendedPayload, ref currentUiDirection, ref isUiLineStart, "RX", formattedPayload, ShowTimestamps, frame.Timestamp);
             logLines.Add(FormatLogLine("RX", formattedPayload, frame.Timestamp));
         }
 
@@ -654,7 +661,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         {
             var warningTimestamp = DateTime.Now;
             var warning = $"接收缓存拥塞，丢弃 {droppedBytes} 字节";
-            AppendUiEntry(appendedText, ref currentUiDirection, ref isUiLineStart, "SYS", warning, ShowTimestamps, warningTimestamp);
+            AppendUiEntry(appendedMetadata, appendedPayload, ref currentUiDirection, ref isUiLineStart, "SYS", warning, ShowTimestamps, warningTimestamp);
             logLines.Add(FormatLogLine("SYS", warning, warningTimestamp));
         }
 
@@ -670,11 +677,11 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
             }
         }
 
-        if (appendedText.Length > 0)
+        if (appendedMetadata.Length > 0 || appendedPayload.Length > 0)
         {
             _lastUiDirection = currentUiDirection;
             _isUiLineStart = isUiLineStart;
-            AppendReceiveText(appendedText.ToString());
+            AppendReceiveText(appendedMetadata.ToString(), appendedPayload.ToString());
         }
 
         if (droppedBytes > 0)
@@ -725,22 +732,23 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
 
     private void AppendUiLine(string direction, string payload, DateTime timestamp)
     {
-        var appendedText = new StringBuilder();
+        var appendedMetadata = new StringBuilder();
+        var appendedPayload = new StringBuilder();
         var currentUiDirection = _lastUiDirection;
         var isUiLineStart = _isUiLineStart;
-        AppendUiEntry(appendedText, ref currentUiDirection, ref isUiLineStart, direction, payload, ShowTimestamps, timestamp);
+        AppendUiEntry(appendedMetadata, appendedPayload, ref currentUiDirection, ref isUiLineStart, direction, payload, ShowTimestamps, timestamp);
 
-        if (appendedText.Length == 0)
+        if (appendedMetadata.Length == 0 && appendedPayload.Length == 0)
         {
             return;
         }
 
         _lastUiDirection = currentUiDirection;
         _isUiLineStart = isUiLineStart;
-        AppendReceiveText(appendedText.ToString());
+        AppendReceiveText(appendedMetadata.ToString(), appendedPayload.ToString());
     }
 
-    private static void AppendUiEntry(StringBuilder builder, ref string? currentDirection, ref bool isUiLineStart, string direction, string payload, bool includeTimestamp, DateTime timestamp)
+    private static void AppendUiEntry(StringBuilder metadataBuilder, StringBuilder payloadBuilder, ref string? currentDirection, ref bool isUiLineStart, string direction, string payload, bool includeTimestamp, DateTime timestamp)
     {
         var needsDirectionSwitch = !string.IsNullOrEmpty(currentDirection)
             && !string.Equals(currentDirection, direction, StringComparison.Ordinal)
@@ -748,15 +756,18 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
 
         if (needsDirectionSwitch)
         {
-            builder.AppendLine();
+            metadataBuilder.AppendLine();
+            payloadBuilder.AppendLine();
             isUiLineStart = true;
         }
 
         if (string.IsNullOrEmpty(payload))
         {
-            AppendUiPrefix(builder, direction, includeTimestamp, timestamp);
+            AppendUiPrefix(metadataBuilder, direction, includeTimestamp, timestamp);
+            metadataBuilder.AppendLine();
+            payloadBuilder.AppendLine();
             currentDirection = direction;
-            isUiLineStart = false;
+            isUiLineStart = true;
             return;
         }
 
@@ -766,15 +777,16 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
 
             if (isUiLineStart && character != '\r' && character != '\n')
             {
-                AppendUiPrefix(builder, direction, includeTimestamp, timestamp);
+                AppendUiPrefix(metadataBuilder, direction, includeTimestamp, timestamp);
                 currentDirection = direction;
                 isUiLineStart = false;
             }
 
-            builder.Append(character);
+            payloadBuilder.Append(character);
 
             if (character == '\r' || character == '\n')
             {
+                metadataBuilder.Append(character);
                 isUiLineStart = true;
             }
         }
@@ -785,7 +797,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         if (includeTimestamp)
         {
             builder.Append('[');
-            builder.Append(timestamp.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture));
+            builder.Append(timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture));
             builder.Append("] ");
         }
 
@@ -799,9 +811,14 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         return $"[{timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{direction}] {SanitizePayloadForLog(payload)}";
     }
 
-    public string GetReceiveTextSnapshot()
+    public string GetReceiveMetadataSnapshot()
     {
-        return _receiveTextBuffer.ToString();
+        return _receiveMetadataBuffer.ToString();
+    }
+
+    public string GetReceivePayloadSnapshot()
+    {
+        return _receivePayloadBuffer.ToString();
     }
 
     private void LogWriter_FilePathChanged(object? sender, EventArgs e)
@@ -849,25 +866,41 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         }
     }
 
-    private void AppendReceiveText(string text)
+    private void AppendReceiveText(string metadataText, string payloadText)
     {
-        if (string.IsNullOrEmpty(text))
+        if (string.IsNullOrEmpty(metadataText) && string.IsNullOrEmpty(payloadText))
         {
             return;
         }
 
-        _receiveTextBuffer.Append(text);
+        var chunk = new ReceiveDisplayChunk(metadataText, payloadText);
+        _receiveDisplayChunks.Enqueue(chunk);
+        _receiveDisplayCharacterCount += metadataText.Length + payloadText.Length;
+        _receiveMetadataBuffer.Append(metadataText);
+        _receivePayloadBuffer.Append(payloadText);
 
-        if (_receiveTextBuffer.Length <= MaxVisibleCharacters)
+        if (_receiveDisplayCharacterCount <= MaxVisibleCharacters * 2)
         {
-            ReceiveTextChanged?.Invoke(this, new ReceiveTextChangedEventArgs(text, replaceAll: false));
+            ReceiveTextChanged?.Invoke(this, new ReceiveTextChangedEventArgs(metadataText, payloadText, replaceAll: false));
             return;
         }
 
-        var startIndex = _receiveTextBuffer.Length - MaxVisibleCharacters;
-        var visibleText = _receiveTextBuffer.ToString(startIndex, MaxVisibleCharacters);
-        _receiveTextBuffer = new StringBuilder(visibleText, MaxVisibleCharacters + 1024);
-        ReceiveTextChanged?.Invoke(this, new ReceiveTextChangedEventArgs(visibleText, replaceAll: true));
+        while (_receiveDisplayCharacterCount > MaxVisibleCharacters * 2 && _receiveDisplayChunks.Count > 0)
+        {
+            var removedChunk = _receiveDisplayChunks.Dequeue();
+            _receiveDisplayCharacterCount -= removedChunk.MetadataText.Length + removedChunk.PayloadText.Length;
+        }
+
+        _receiveMetadataBuffer = new StringBuilder(Math.Min(MaxVisibleCharacters, _receiveDisplayCharacterCount / 2 + 1024));
+        _receivePayloadBuffer = new StringBuilder(Math.Min(MaxVisibleCharacters, _receiveDisplayCharacterCount + 1024));
+
+        foreach (var displayChunk in _receiveDisplayChunks)
+        {
+            _receiveMetadataBuffer.Append(displayChunk.MetadataText);
+            _receivePayloadBuffer.Append(displayChunk.PayloadText);
+        }
+
+        ReceiveTextChanged?.Invoke(this, new ReceiveTextChangedEventArgs(_receiveMetadataBuffer.ToString(), _receivePayloadBuffer.ToString(), replaceAll: true));
     }
 
     private void ClearPendingReceiveFrames()
@@ -991,6 +1024,8 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
     }
 
     private readonly record struct PendingReceiveFrame(DateTime Timestamp, byte[] Buffer);
+
+    private readonly record struct ReceiveDisplayChunk(string MetadataText, string PayloadText);
 
     private static string FormatStopBits(StopBits stopBits)
     {
