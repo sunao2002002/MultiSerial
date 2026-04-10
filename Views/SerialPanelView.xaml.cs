@@ -46,7 +46,7 @@ public partial class SerialPanelView : System.Windows.Controls.UserControl
     {
         if (DataContext is SerialPanelViewModel viewModel)
         {
-            viewModel.RefreshAvailablePorts();
+            _ = viewModel.RefreshAvailablePortsAsync();
         }
     }
 

@@ -36,9 +36,11 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
     private long _pendingReceiveBytes;
     private long _droppedReceiveBytes;
     private int _isFlushRunning;
+    private int _portRefreshVersion;
 
     private bool _isActive;
     private bool _isConnected;
+    private bool _isRefreshingPorts;
     private bool _showTimestamps;
     private bool _receiveAsHex;
     private bool _sendAsHex;
@@ -72,7 +74,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         StopBitsOptions = new ObservableCollection<StopBits>(new[] { StopBits.One, StopBits.OnePointFive, StopBits.Two });
         SendHistory = _appStateService.RecentSendHistory;
 
-        RefreshPortsCommand = new RelayCommand(_ => RefreshAvailablePorts());
+        RefreshPortsCommand = new RelayCommand(_ => _ = RefreshAvailablePortsAsync());
         ToggleConnectionCommand = new RelayCommand(_ => _ = ToggleConnectionAsync(), _ => CanToggleConnection());
         SendCommand = new RelayCommand(_ => _ = SendAsync(), _ => CanSend());
         ClearReceiveCommand = new RelayCommand(_ => ClearReceiveText());
@@ -84,7 +86,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         _receiveFlushTimer.Tick += ReceiveFlushTimer_Tick;
         _receiveFlushTimer.Start();
 
-        RefreshAvailablePorts();
+        _ = RefreshAvailablePortsAsync();
     }
 
     public int PanelIndex { get; }
@@ -136,6 +138,12 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
     }
 
     public string ConnectionButtonText => IsConnected ? "关闭串口" : "打开串口";
+
+    public bool IsRefreshingPorts
+    {
+        get => _isRefreshingPorts;
+        private set => SetProperty(ref _isRefreshingPorts, value);
+    }
 
     public bool ShowTimestamps
     {
@@ -274,9 +282,41 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         _activateCallback(this);
     }
 
-    public void RefreshAvailablePorts()
+    public Task RefreshAvailablePortsAsync()
     {
-        ApplyAvailablePorts(SerialPortCatalogService.GetAvailablePorts());
+        var refreshVersion = Interlocked.Increment(ref _portRefreshVersion);
+        IsRefreshingPorts = true;
+
+        return RefreshAvailablePortsCoreAsync(refreshVersion);
+    }
+
+    private async Task RefreshAvailablePortsCoreAsync(int refreshVersion)
+    {
+        try
+        {
+            var ports = await Task.Run(SerialPortCatalogService.GetAvailablePorts);
+
+            if (refreshVersion != Volatile.Read(ref _portRefreshVersion))
+            {
+                return;
+            }
+
+            ApplyAvailablePorts(ports);
+        }
+        catch (Exception ex)
+        {
+            if (refreshVersion == Volatile.Read(ref _portRefreshVersion))
+            {
+                StatusMessage = $"串口刷新失败：{ex.Message}";
+            }
+        }
+        finally
+        {
+            if (refreshVersion == Volatile.Read(ref _portRefreshVersion))
+            {
+                IsRefreshingPorts = false;
+            }
+        }
     }
 
     public SerialAdvancedSettings GetAdvancedSettings()

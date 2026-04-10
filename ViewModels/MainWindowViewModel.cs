@@ -19,6 +19,8 @@ public sealed class MainWindowViewModel : ViewModelBase
     private LayoutNodeViewModel _rootNode;
     private SerialPanelViewModel? _activePanel;
     private int _panelSequence = 1;
+    private int _refreshAllPortsVersion;
+    private bool _isRefreshingAllPorts;
 
     public MainWindowViewModel()
     {
@@ -73,19 +75,48 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     public string StartupWarning => _appStateService.LastWarning ?? string.Empty;
 
-    public void RefreshAllPorts()
+    public bool IsRefreshingAllPorts
     {
-        var ports = QueryAvailablePorts();
+        get => _isRefreshingAllPorts;
+        private set => SetProperty(ref _isRefreshingAllPorts, value);
+    }
 
-        foreach (var panel in EnumeratePanels(RootNode).ToArray())
+    public Task RefreshAllPortsAsync()
+    {
+        var refreshVersion = Interlocked.Increment(ref _refreshAllPortsVersion);
+        IsRefreshingAllPorts = true;
+
+        return RefreshAllPortsCoreAsync(refreshVersion);
+    }
+
+    private async Task RefreshAllPortsCoreAsync(int refreshVersion)
+    {
+        try
         {
-            panel.ApplyAvailablePorts(ports);
+            var ports = await QueryAvailablePortsAsync();
+
+            if (refreshVersion != Volatile.Read(ref _refreshAllPortsVersion))
+            {
+                return;
+            }
+
+            foreach (var panel in EnumeratePanels(RootNode).ToArray())
+            {
+                panel.ApplyAvailablePorts(ports);
+            }
+        }
+        finally
+        {
+            if (refreshVersion == Volatile.Read(ref _refreshAllPortsVersion))
+            {
+                IsRefreshingAllPorts = false;
+            }
         }
     }
 
     public async Task HandleSerialDevicesChangedAsync()
     {
-        var ports = QueryAvailablePorts();
+        var ports = await QueryAvailablePortsAsync();
         await _deviceRefreshLock.WaitAsync();
 
         try
@@ -270,8 +301,8 @@ public sealed class MainWindowViewModel : ViewModelBase
         }
     }
 
-    private static SerialPortOption[] QueryAvailablePorts()
+    private static Task<SerialPortOption[]> QueryAvailablePortsAsync()
     {
-        return SerialPortCatalogService.GetAvailablePorts();
+        return Task.Run(SerialPortCatalogService.GetAvailablePorts);
     }
 }

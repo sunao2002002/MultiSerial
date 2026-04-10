@@ -50,9 +50,9 @@ public partial class MainWindow : Window
         Close();
     }
 
-    private void RefreshPortsMenuItem_Click(object sender, RoutedEventArgs e)
+    private async void RefreshPortsMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        _viewModel.RefreshAllPorts();
+        await _viewModel.RefreshAllPortsAsync();
     }
 
     private async void SelectLogDirectoryMenuItem_Click(object sender, RoutedEventArgs e)
