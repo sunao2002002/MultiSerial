@@ -502,9 +502,12 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
 
         try
         {
-            var payload = BuildOutgoingPayload(SendText, SendAsHex, AppendCrLfOnSend);
+            var originalSendText = SendText;
+            var payload = BuildOutgoingPayload(originalSendText, SendAsHex, AppendCrLfOnSend);
             await _serialSession.SendAsync(payload);
-            _appStateService.RememberSend(SendText);
+            _appStateService.RememberSend(originalSendText);
+            _sendText = originalSendText;
+            OnPropertyChanged(nameof(SendText));
             var timestamp = DateTime.Now;
             var displayPayload = FormatOutgoingPayloadForDisplay(payload, SendAsHex);
             var logPayload = FormatOutgoingPayloadForLog(payload, SendAsHex);
