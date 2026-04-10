@@ -55,7 +55,11 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
     private string _statusMessage = "未连接";
     private string? _selectedHistory;
 
-    public SerialPanelViewModel(int panelIndex, Action<SerialPanelViewModel> activateCallback, AppStateService appStateService)
+    public SerialPanelViewModel(
+        int panelIndex,
+        Action<SerialPanelViewModel> activateCallback,
+        AppStateService appStateService,
+        IEnumerable<SerialPortOption>? initialPortOptions = null)
     {
         PanelIndex = panelIndex;
         _activateCallback = activateCallback;
@@ -74,7 +78,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         StopBitsOptions = new ObservableCollection<StopBits>(new[] { StopBits.One, StopBits.OnePointFive, StopBits.Two });
         SendHistory = _appStateService.RecentSendHistory;
 
-        RefreshPortsCommand = new RelayCommand(_ => _ = RefreshAvailablePortsAsync());
+        RefreshPortsCommand = new RelayCommand(_ => _ = RefreshAvailablePortsAsync(forceRefresh: true));
         ToggleConnectionCommand = new RelayCommand(_ => _ = ToggleConnectionAsync(), _ => CanToggleConnection());
         SendCommand = new RelayCommand(_ => _ = SendAsync(), _ => CanSend());
         ClearReceiveCommand = new RelayCommand(_ => ClearReceiveText());
@@ -86,7 +90,14 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         _receiveFlushTimer.Tick += ReceiveFlushTimer_Tick;
         _receiveFlushTimer.Start();
 
-        _ = RefreshAvailablePortsAsync();
+        if (initialPortOptions is not null)
+        {
+            ApplyAvailablePorts(initialPortOptions);
+        }
+        else
+        {
+            _ = RefreshAvailablePortsAsync(forceRefresh: true);
+        }
     }
 
     public int PanelIndex { get; }
@@ -282,19 +293,19 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         _activateCallback(this);
     }
 
-    public Task RefreshAvailablePortsAsync()
+    public Task RefreshAvailablePortsAsync(bool forceRefresh = false)
     {
         var refreshVersion = Interlocked.Increment(ref _portRefreshVersion);
         IsRefreshingPorts = true;
 
-        return RefreshAvailablePortsCoreAsync(refreshVersion);
+        return RefreshAvailablePortsCoreAsync(refreshVersion, forceRefresh);
     }
 
-    private async Task RefreshAvailablePortsCoreAsync(int refreshVersion)
+    private async Task RefreshAvailablePortsCoreAsync(int refreshVersion, bool forceRefresh)
     {
         try
         {
-            var ports = await Task.Run(SerialPortCatalogService.GetAvailablePorts);
+            var ports = await Task.Run(() => SerialPortCatalogService.GetAvailablePorts(forceRefresh));
 
             if (refreshVersion != Volatile.Read(ref _portRefreshVersion))
             {
@@ -317,6 +328,18 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
                 IsRefreshingPorts = false;
             }
         }
+    }
+
+    public SerialPortOption[] GetAvailablePortsSnapshot()
+    {
+        return AvailablePorts
+            .Select(option => new SerialPortOption
+            {
+                PortName = option.PortName,
+                FriendlyName = option.FriendlyName,
+                DetailText = option.DetailText,
+            })
+            .ToArray();
     }
 
     public SerialAdvancedSettings GetAdvancedSettings()

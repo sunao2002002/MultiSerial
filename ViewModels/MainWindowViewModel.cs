@@ -18,6 +18,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     private readonly SemaphoreSlim _deviceRefreshLock = new(1, 1);
     private LayoutNodeViewModel _rootNode;
     private SerialPanelViewModel? _activePanel;
+    private SerialPortOption[] _lastKnownPorts = Array.Empty<SerialPortOption>();
     private int _panelSequence = 1;
     private int _refreshAllPortsVersion;
     private bool _isRefreshingAllPorts;
@@ -25,7 +26,8 @@ public sealed class MainWindowViewModel : ViewModelBase
     public MainWindowViewModel()
     {
         _appStateService = new AppStateService();
-        var initialPanel = CreatePanel();
+        _lastKnownPorts = QueryAvailablePorts(forceRefresh: true);
+        var initialPanel = CreatePanel(_lastKnownPorts);
         _rootNode = initialPanel;
         ActivatePanel(initialPanel);
     }
@@ -93,12 +95,14 @@ public sealed class MainWindowViewModel : ViewModelBase
     {
         try
         {
-            var ports = await QueryAvailablePortsAsync();
+            var ports = await QueryAvailablePortsAsync(forceRefresh: true);
 
             if (refreshVersion != Volatile.Read(ref _refreshAllPortsVersion))
             {
                 return;
             }
+
+            _lastKnownPorts = ports;
 
             foreach (var panel in EnumeratePanels(RootNode).ToArray())
             {
@@ -116,11 +120,13 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     public async Task HandleSerialDevicesChangedAsync()
     {
-        var ports = await QueryAvailablePortsAsync();
+        var ports = await QueryAvailablePortsAsync(forceRefresh: true);
         await _deviceRefreshLock.WaitAsync();
 
         try
         {
+            _lastKnownPorts = ports;
+
             foreach (var panel in EnumeratePanels(RootNode).ToArray())
             {
                 await panel.HandlePortInventoryChangedAsync(ports);
@@ -163,7 +169,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 
         var existingPanel = ActivePanel;
         var existingParent = existingPanel.Parent;
-        var newPanel = CreatePanel();
+        var newPanel = CreatePanel(existingPanel.GetAvailablePortsSnapshot());
         var splitNode = new SplitPanelNodeViewModel(orientation, existingPanel, newPanel);
 
         if (existingParent is null)
@@ -222,9 +228,9 @@ public sealed class MainWindowViewModel : ViewModelBase
         ActivePanel = panel;
     }
 
-    private SerialPanelViewModel CreatePanel()
+    private SerialPanelViewModel CreatePanel(IEnumerable<SerialPortOption>? initialPorts = null)
     {
-        return new SerialPanelViewModel(_panelSequence++, ActivatePanel, _appStateService);
+        return new SerialPanelViewModel(_panelSequence++, ActivatePanel, _appStateService, initialPorts);
     }
 
     private void ActivePanel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -301,8 +307,13 @@ public sealed class MainWindowViewModel : ViewModelBase
         }
     }
 
-    private static Task<SerialPortOption[]> QueryAvailablePortsAsync()
+    private static Task<SerialPortOption[]> QueryAvailablePortsAsync(bool forceRefresh = false)
     {
-        return Task.Run(SerialPortCatalogService.GetAvailablePorts);
+        return Task.Run(() => SerialPortCatalogService.GetAvailablePorts(forceRefresh));
+    }
+
+    private static SerialPortOption[] QueryAvailablePorts(bool forceRefresh = false)
+    {
+        return SerialPortCatalogService.GetAvailablePorts(forceRefresh);
     }
 }
