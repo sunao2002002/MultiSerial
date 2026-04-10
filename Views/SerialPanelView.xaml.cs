@@ -9,11 +9,14 @@ namespace SerialApp.Desktop.Views;
 
 public partial class SerialPanelView : System.Windows.Controls.UserControl
 {
+    private SerialPanelViewModel? _boundViewModel;
+
     public SerialPanelView()
     {
         InitializeComponent();
         AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler(HandlePanelPreviewMouseLeftButtonDown), true);
-        ReceiveTextBox.TextChanged += ReceiveTextBox_TextChanged;
+        DataContextChanged += SerialPanelView_DataContextChanged;
+        Unloaded += SerialPanelView_Unloaded;
     }
 
     private void HandlePanelPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -24,9 +27,19 @@ public partial class SerialPanelView : System.Windows.Controls.UserControl
         }
     }
 
-    private void ReceiveTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    private void SerialPanelView_DataContextChanged(object sender, System.Windows.DependencyPropertyChangedEventArgs e)
     {
-        ReceiveTextBox.ScrollToEnd();
+        DetachViewModel();
+
+        if (e.NewValue is SerialPanelViewModel viewModel)
+        {
+            AttachViewModel(viewModel);
+        }
+    }
+
+    private void SerialPanelView_Unloaded(object sender, System.Windows.RoutedEventArgs e)
+    {
+        DetachViewModel();
     }
 
     private void PortComboBox_DropDownOpened(object sender, System.EventArgs e)
@@ -126,5 +139,44 @@ public partial class SerialPanelView : System.Windows.Controls.UserControl
         };
 
         Process.Start(startInfo);
+    }
+
+    private void AttachViewModel(SerialPanelViewModel viewModel)
+    {
+        _boundViewModel = viewModel;
+        _boundViewModel.ReceiveTextChanged += BoundViewModel_ReceiveTextChanged;
+        ReceiveTextBox.Text = _boundViewModel.GetReceiveTextSnapshot();
+        ReceiveTextBox.ScrollToEnd();
+    }
+
+    private void DetachViewModel()
+    {
+        if (_boundViewModel is null)
+        {
+            return;
+        }
+
+        _boundViewModel.ReceiveTextChanged -= BoundViewModel_ReceiveTextChanged;
+        _boundViewModel = null;
+    }
+
+    private void BoundViewModel_ReceiveTextChanged(object? sender, ReceiveTextChangedEventArgs e)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            _ = Dispatcher.InvokeAsync(() => BoundViewModel_ReceiveTextChanged(sender, e));
+            return;
+        }
+
+        if (e.ReplaceAll)
+        {
+            ReceiveTextBox.Text = e.Text;
+        }
+        else
+        {
+            ReceiveTextBox.AppendText(e.Text);
+        }
+
+        ReceiveTextBox.ScrollToEnd();
     }
 }

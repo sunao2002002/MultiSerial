@@ -27,11 +27,12 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
     private readonly Action<SerialPanelViewModel> _activateCallback;
     private readonly AppStateService _appStateService;
     private readonly Decoder _utf8Decoder = Encoding.UTF8.GetDecoder();
+    private readonly SemaphoreSlim _panelOperationLock = new(1, 1);
     private readonly DispatcherTimer _receiveFlushTimer;
-    private readonly StringBuilder _receiveTextBuilder = new();
     private readonly ConcurrentQueue<PendingReceiveFrame> _pendingReceiveFrames = new();
     private readonly PanelLogWriter _logWriter;
     private readonly SerialPortSession _serialSession;
+    private StringBuilder _receiveTextBuffer = new(MaxVisibleCharacters);
     private long _pendingReceiveBytes;
     private long _droppedReceiveBytes;
     private int _isFlushRunning;
@@ -48,7 +49,6 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
     private string _selectedStartBits = "1";
     private Parity _selectedParity = Parity.None;
     private StopBits _selectedStopBits = StopBits.One;
-    private string _receiveText = string.Empty;
     private string _sendText = string.Empty;
     private string _statusMessage = "未连接";
     private string? _selectedHistory;
@@ -62,6 +62,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         _serialSession.DataReceived += SerialSession_DataReceived;
         _serialSession.ErrorOccurred += SerialSession_ErrorOccurred;
         _logWriter = new PanelLogWriter(panelIndex, _appStateService.LogDirectory);
+        _logWriter.FilePathChanged += LogWriter_FilePathChanged;
 
         AvailablePorts = new ObservableCollection<SerialPortOption>();
         BaudRateOptions = new ObservableCollection<int>(new[] { 9600, 115200, 460800, 921600, 1_000_000, 2_000_000, 3_000_000, 4_000_000 });
@@ -111,6 +112,8 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
     public ICommand SendCommand { get; }
 
     public ICommand ClearReceiveCommand { get; }
+
+    public event EventHandler<ReceiveTextChangedEventArgs>? ReceiveTextChanged;
 
     public string LogFilePath => _logWriter.FilePath;
 
@@ -242,12 +245,6 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         }
     }
 
-    public string ReceiveText
-    {
-        get => _receiveText;
-        private set => SetProperty(ref _receiveText, value);
-    }
-
     public string SendText
     {
         get => _sendText;
@@ -328,66 +325,93 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
 
     public async Task HandlePortInventoryChangedAsync(IEnumerable<SerialPortOption> portOptions)
     {
-        var ports = portOptions.ToArray();
-        var connectedPortName = SelectedPortName;
-        ApplyAvailablePorts(ports);
+        await _panelOperationLock.WaitAsync();
 
-        if (IsConnected
-            && !string.IsNullOrWhiteSpace(connectedPortName)
-            && !ports.Any(port => string.Equals(port.PortName, connectedPortName, StringComparison.OrdinalIgnoreCase)))
+        try
         {
-            await _serialSession.CloseAsync();
-            IsConnected = false;
-            _utf8Decoder.Reset();
-            var notice = $"串口 {connectedPortName} 已移除，连接已自动关闭";
-            StatusMessage = $"未连接（{connectedPortName} 已移除）";
-            AppendUiLine("SYS", notice, DateTime.Now);
-            await WriteLogAsync("SYS", notice, DateTime.Now);
+            var ports = portOptions.ToArray();
+            var connectedPortName = SelectedPortName;
+            ApplyAvailablePorts(ports);
+
+            if (IsConnected
+                && !string.IsNullOrWhiteSpace(connectedPortName)
+                && !ports.Any(port => string.Equals(port.PortName, connectedPortName, StringComparison.OrdinalIgnoreCase)))
+            {
+                var timestamp = DateTime.Now;
+                var notice = $"串口 {connectedPortName} 已移除，连接已自动关闭";
+                await CloseConnectionCoreAsync($"未连接（{connectedPortName} 已移除）", notice, timestamp, appendToUi: true);
+            }
+        }
+        finally
+        {
+            _panelOperationLock.Release();
         }
     }
 
     public async Task RotateLogDirectoryAsync(string directory)
     {
-        await _logWriter.RotateDirectoryAsync(directory, SelectedPortName);
-        OnPropertyChanged(nameof(LogFilePath));
-        StatusMessage = IsConnected ? GetConnectedStatus(SelectedPortName, BaudRateText) : "未连接";
-        await WriteLogAsync("SYS", $"log directory switched to {directory}", DateTime.Now);
+        await _panelOperationLock.WaitAsync();
+
+        try
+        {
+            await _logWriter.RotateDirectoryAsync(directory, SelectedPortName);
+            StatusMessage = IsConnected ? GetConnectedStatus(SelectedPortName, BaudRateText) : "未连接";
+
+            if (_logWriter.HasActiveFile)
+            {
+                await TryWriteLogAsync("SYS", $"log directory switched to {directory}", DateTime.Now);
+            }
+        }
+        finally
+        {
+            _panelOperationLock.Release();
+        }
     }
 
     public async Task ToggleConnectionAsync()
     {
+        await _panelOperationLock.WaitAsync();
+
         try
         {
             if (IsConnected)
             {
-                await _serialSession.CloseAsync();
-                IsConnected = false;
-                _utf8Decoder.Reset();
-                StatusMessage = "未连接";
-                await WriteLogAsync("SYS", "port closed", DateTime.Now);
+                await CloseConnectionCoreAsync("未连接", "port closed", DateTime.Now, appendToUi: false);
                 return;
             }
 
             var settings = BuildSettings();
             await _logWriter.RotateDirectoryAsync(_appStateService.LogDirectory, settings.PortName);
-            OnPropertyChanged(nameof(LogFilePath));
             await _serialSession.OpenAsync(settings);
             IsConnected = true;
             _utf8Decoder.Reset();
             StatusMessage = GetConnectedStatus(settings.PortName, settings.BaudRate.ToString(CultureInfo.InvariantCulture));
-            await WriteLogAsync("SYS", $"port opened {settings.PortName} @ {settings.BaudRate}", DateTime.Now);
+            await TryWriteLogAsync("SYS", $"port opened {settings.PortName} @ {settings.BaudRate}", DateTime.Now);
         }
         catch (Exception ex)
         {
             StatusMessage = $"打开失败：{ex.Message}";
         }
+        finally
+        {
+            _panelOperationLock.Release();
+        }
     }
 
     public async Task DisconnectIfNeededAsync()
     {
-        if (IsConnected)
+        await _panelOperationLock.WaitAsync();
+
+        try
         {
-            await ToggleConnectionAsync();
+            if (IsConnected)
+            {
+                await CloseConnectionCoreAsync("未连接", "port closed", DateTime.Now, appendToUi: false);
+            }
+        }
+        finally
+        {
+            _panelOperationLock.Release();
         }
     }
 
@@ -407,7 +431,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
             var displayPayload = FormatOutgoingPayloadForDisplay(payload, SendAsHex);
             var logPayload = FormatOutgoingPayloadForLog(payload, SendAsHex);
             AppendUiLine("TX", displayPayload, timestamp);
-            await WriteLogAsync("TX", logPayload, timestamp);
+            await TryWriteLogAsync("TX", logPayload, timestamp);
         }
         catch (Exception ex)
         {
@@ -417,19 +441,32 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
 
     public void ClearReceiveText()
     {
-        _receiveTextBuilder.Clear();
-        ReceiveText = string.Empty;
+        _receiveTextBuffer = new StringBuilder(MaxVisibleCharacters);
+        ReceiveTextChanged?.Invoke(this, new ReceiveTextChangedEventArgs(string.Empty, replaceAll: true));
     }
 
     public async ValueTask DisposeAsync()
     {
         _receiveFlushTimer.Stop();
         _receiveFlushTimer.Tick -= ReceiveFlushTimer_Tick;
-        _serialSession.DataReceived -= SerialSession_DataReceived;
-        _serialSession.ErrorOccurred -= SerialSession_ErrorOccurred;
-        await _serialSession.CloseAsync();
-        _serialSession.Dispose();
-        await _logWriter.DisposeAsync();
+
+        await _panelOperationLock.WaitAsync();
+
+        try
+        {
+            _serialSession.DataReceived -= SerialSession_DataReceived;
+            _serialSession.ErrorOccurred -= SerialSession_ErrorOccurred;
+            _logWriter.FilePathChanged -= LogWriter_FilePathChanged;
+            await _serialSession.CloseAsync();
+            _serialSession.Dispose();
+            ClearPendingReceiveFrames();
+            await _logWriter.DisposeAsync();
+        }
+        finally
+        {
+            _panelOperationLock.Release();
+            _panelOperationLock.Dispose();
+        }
     }
 
     private bool CanToggleConnection()
@@ -517,36 +554,45 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         }
 
         var appendedText = new StringBuilder();
+        var logLines = new List<string>();
         var flushedBytes = 0;
         long droppedBytes = 0;
 
-        await _logWriter.WriteBatchAsync(async writer =>
+        while (flushedBytes < MaxBytesPerFlush && _pendingReceiveFrames.TryDequeue(out var frame))
         {
-            while (flushedBytes < MaxBytesPerFlush && _pendingReceiveFrames.TryDequeue(out var frame))
+            Interlocked.Add(ref _pendingReceiveBytes, -frame.Buffer.Length);
+            flushedBytes += frame.Buffer.Length;
+
+            var formattedPayload = FormatIncomingPayload(frame.Buffer);
+            appendedText.AppendLine(FormatUiLine("RX", formattedPayload, ShowTimestamps, frame.Timestamp));
+            logLines.Add(FormatLogLine("RX", formattedPayload, frame.Timestamp));
+        }
+
+        droppedBytes = Interlocked.Exchange(ref _droppedReceiveBytes, 0);
+
+        if (droppedBytes > 0)
+        {
+            var warningTimestamp = DateTime.Now;
+            var warning = $"接收缓存拥塞，丢弃 {droppedBytes} 字节";
+            appendedText.AppendLine(FormatUiLine("SYS", warning, ShowTimestamps, warningTimestamp));
+            logLines.Add(FormatLogLine("SYS", warning, warningTimestamp));
+        }
+
+        if (logLines.Count > 0)
+        {
+            try
             {
-                Interlocked.Add(ref _pendingReceiveBytes, -frame.Buffer.Length);
-                flushedBytes += frame.Buffer.Length;
-
-                var formattedPayload = FormatIncomingPayload(frame.Buffer);
-                appendedText.AppendLine(FormatUiLine("RX", formattedPayload, ShowTimestamps, frame.Timestamp));
-                await writer.WriteLineAsync(FormatLogLine("RX", formattedPayload, frame.Timestamp));
+                await _logWriter.WriteLinesAsync(logLines);
             }
-
-            droppedBytes = Interlocked.Exchange(ref _droppedReceiveBytes, 0);
-
-            if (droppedBytes > 0)
+            catch (Exception ex)
             {
-                var warningTimestamp = DateTime.Now;
-                var warning = $"接收缓存拥塞，丢弃 {droppedBytes} 字节";
-                appendedText.AppendLine(FormatUiLine("SYS", warning, ShowTimestamps, warningTimestamp));
-                await writer.WriteLineAsync(FormatLogLine("SYS", warning, warningTimestamp));
+                StatusMessage = $"日志写入失败：{ex.Message}";
             }
-        });
+        }
 
         if (appendedText.Length > 0)
         {
-            _receiveTextBuilder.Append(appendedText);
-            ReceiveText = TrimReceiveText(_receiveTextBuilder);
+            AppendReceiveText(appendedText.ToString());
         }
 
         if (droppedBytes > 0)
@@ -595,21 +641,9 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         }
     }
 
-    private static string TrimReceiveText(StringBuilder builder)
-    {
-        if (builder.Length > MaxVisibleCharacters)
-        {
-            var trimLength = builder.Length - MaxVisibleCharacters;
-            builder.Remove(0, trimLength);
-        }
-
-        return builder.ToString();
-    }
-
     private void AppendUiLine(string direction, string payload, DateTime timestamp)
     {
-        _receiveTextBuilder.AppendLine(FormatUiLine(direction, payload, ShowTimestamps, timestamp));
-        ReceiveText = TrimReceiveText(_receiveTextBuilder);
+        AppendReceiveText(FormatUiLine(direction, payload, ShowTimestamps, timestamp) + Environment.NewLine);
     }
 
     private string FormatUiLine(string direction, string payload, bool includeTimestamp, DateTime timestamp)
@@ -627,9 +661,77 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         return $"[{timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{direction}] {SanitizePayloadForLog(payload)}";
     }
 
-    private async Task WriteLogAsync(string direction, string payload, DateTime timestamp)
+    public string GetReceiveTextSnapshot()
     {
-        await _logWriter.WriteLineAsync(FormatLogLine(direction, payload, timestamp));
+        return _receiveTextBuffer.ToString();
+    }
+
+    private void LogWriter_FilePathChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(LogFilePath));
+    }
+
+    private async Task CloseConnectionCoreAsync(string statusMessage, string? logMessage, DateTime timestamp, bool appendToUi)
+    {
+        await _serialSession.CloseAsync();
+        IsConnected = false;
+        _utf8Decoder.Reset();
+        StatusMessage = statusMessage;
+
+        if (!string.IsNullOrWhiteSpace(logMessage) && appendToUi)
+        {
+            AppendUiLine("SYS", logMessage, timestamp);
+        }
+
+        if (!string.IsNullOrWhiteSpace(logMessage))
+        {
+            await TryWriteLogAsync("SYS", logMessage, timestamp);
+        }
+
+        await _logWriter.CloseLogFileAsync();
+    }
+
+    private async Task TryWriteLogAsync(string direction, string payload, DateTime timestamp)
+    {
+        try
+        {
+            await _logWriter.WriteLineAsync(FormatLogLine(direction, payload, timestamp));
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"日志写入失败：{ex.Message}";
+        }
+    }
+
+    private void AppendReceiveText(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        _receiveTextBuffer.Append(text);
+
+        if (_receiveTextBuffer.Length <= MaxVisibleCharacters)
+        {
+            ReceiveTextChanged?.Invoke(this, new ReceiveTextChangedEventArgs(text, replaceAll: false));
+            return;
+        }
+
+        var startIndex = _receiveTextBuffer.Length - MaxVisibleCharacters;
+        var visibleText = _receiveTextBuffer.ToString(startIndex, MaxVisibleCharacters);
+        _receiveTextBuffer = new StringBuilder(visibleText, MaxVisibleCharacters + 1024);
+        ReceiveTextChanged?.Invoke(this, new ReceiveTextChangedEventArgs(visibleText, replaceAll: true));
+    }
+
+    private void ClearPendingReceiveFrames()
+    {
+        while (_pendingReceiveFrames.TryDequeue(out _))
+        {
+        }
+
+        Interlocked.Exchange(ref _pendingReceiveBytes, 0);
+        Interlocked.Exchange(ref _droppedReceiveBytes, 0);
     }
 
     private static string SanitizePayloadForLog(string payload)
