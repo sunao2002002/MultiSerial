@@ -12,10 +12,13 @@ namespace SerialApp.Desktop.Services;
 public sealed class AppStateService
 {
     private const int MaxHistoryCount = 32;
+    private const string DefaultPanelFontFamily = "Consolas";
+    private const double DefaultPanelFontSize = 13d;
 
     private readonly SemaphoreSlim _saveLock = new(1, 1);
     private readonly string _settingsFilePath;
     private string _logDirectory;
+    private PanelFontSettings _panelFontSettings;
 
     public AppStateService()
     {
@@ -30,6 +33,7 @@ public sealed class AppStateService
 
         var preferences = LoadPreferences();
         _logDirectory = ResolveWritableDirectory(preferences.LogDirectory, out var warningMessage);
+        _panelFontSettings = NormalizePanelFontSettings(preferences.PanelFontSettings);
         LastWarning = warningMessage;
         RecentSendHistory = new ObservableCollection<string>(preferences.RecentSendHistory.Take(MaxHistoryCount));
     }
@@ -41,6 +45,10 @@ public sealed class AppStateService
     public string? LastWarning { get; private set; }
 
     public ObservableCollection<string> RecentSendHistory { get; }
+
+    public event EventHandler? PanelFontSettingsChanged;
+
+    public PanelFontSettings PanelFontSettings => ClonePanelFontSettings(_panelFontSettings);
 
     public bool SetLogDirectory(string directory)
     {
@@ -82,6 +90,21 @@ public sealed class AppStateService
         _ = SaveAsync();
     }
 
+    public bool SetPanelFontSettings(PanelFontSettings settings)
+    {
+        var normalizedSettings = NormalizePanelFontSettings(settings);
+
+        if (AreSamePanelFontSettings(_panelFontSettings, normalizedSettings))
+        {
+            return false;
+        }
+
+        _panelFontSettings = normalizedSettings;
+        _ = SaveAsync();
+        PanelFontSettingsChanged?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
     public Task FlushAsync()
     {
         return SaveAsync();
@@ -110,6 +133,7 @@ public sealed class AppStateService
         var snapshot = new AppPreferences
         {
             LogDirectory = _logDirectory,
+            PanelFontSettings = ClonePanelFontSettings(_panelFontSettings),
             RecentSendHistory = RecentSendHistory.ToList(),
         };
 
@@ -181,5 +205,40 @@ public sealed class AppStateService
             resolvedDirectory = string.Empty;
             return false;
         }
+    }
+
+    private static PanelFontSettings NormalizePanelFontSettings(PanelFontSettings? settings)
+    {
+        if (settings is null)
+        {
+            return new PanelFontSettings();
+        }
+
+        return new PanelFontSettings
+        {
+            FamilyName = string.IsNullOrWhiteSpace(settings.FamilyName) ? DefaultPanelFontFamily : settings.FamilyName.Trim(),
+            Size = settings.Size > 0d ? settings.Size : DefaultPanelFontSize,
+            Bold = settings.Bold,
+            Italic = settings.Italic,
+        };
+    }
+
+    private static PanelFontSettings ClonePanelFontSettings(PanelFontSettings settings)
+    {
+        return new PanelFontSettings
+        {
+            FamilyName = settings.FamilyName,
+            Size = settings.Size,
+            Bold = settings.Bold,
+            Italic = settings.Italic,
+        };
+    }
+
+    private static bool AreSamePanelFontSettings(PanelFontSettings left, PanelFontSettings right)
+    {
+        return string.Equals(left.FamilyName, right.FamilyName, StringComparison.OrdinalIgnoreCase)
+            && Math.Abs(left.Size - right.Size) < 0.1d
+            && left.Bold == right.Bold
+            && left.Italic == right.Italic;
     }
 }

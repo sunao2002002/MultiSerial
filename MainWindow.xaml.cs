@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Forms;
 using System.Windows.Interop;
+using SerialApp.Desktop.Models;
 using SerialApp.Desktop.ViewModels;
 using ControlOrientation = System.Windows.Controls.Orientation;
 
@@ -77,6 +78,43 @@ public partial class MainWindow : Window
         await _viewModel.ResetLogDirectoryAsync();
     }
 
+    private void FontSettingsMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var currentSettings = _viewModel.GetPanelFontSettings();
+
+        using var dialog = new FontDialog
+        {
+            ShowColor = false,
+            ShowEffects = false,
+            FontMustExist = true,
+            AllowVerticalFonts = false,
+        };
+
+        try
+        {
+            dialog.Font = new System.Drawing.Font(
+                currentSettings.FamilyName,
+                (float)currentSettings.Size,
+                BuildDrawingFontStyle(currentSettings));
+        }
+        catch
+        {
+        }
+
+        if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK || dialog.Font is null)
+        {
+            return;
+        }
+
+        _viewModel.UpdatePanelFontSettings(new PanelFontSettings
+        {
+            FamilyName = dialog.Font.FontFamily.Name,
+            Size = dialog.Font.Size,
+            Bold = dialog.Font.Bold,
+            Italic = dialog.Font.Italic,
+        });
+    }
+
     private void OpenHelpMenuItem_Click(object sender, RoutedEventArgs e)
     {
         var helpFilePath = Path.Combine(AppContext.BaseDirectory, HelpDocumentRelativePath);
@@ -127,5 +165,22 @@ public partial class MainWindow : Window
         }
 
         return IntPtr.Zero;
+    }
+
+    private static System.Drawing.FontStyle BuildDrawingFontStyle(PanelFontSettings settings)
+    {
+        var fontStyle = System.Drawing.FontStyle.Regular;
+
+        if (settings.Bold)
+        {
+            fontStyle |= System.Drawing.FontStyle.Bold;
+        }
+
+        if (settings.Italic)
+        {
+            fontStyle |= System.Drawing.FontStyle.Italic;
+        }
+
+        return fontStyle;
     }
 }

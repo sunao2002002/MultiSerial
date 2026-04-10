@@ -83,6 +83,16 @@ public sealed class MainWindowViewModel : ViewModelBase
         private set => SetProperty(ref _isRefreshingAllPorts, value);
     }
 
+    public PanelFontSettings GetPanelFontSettings()
+    {
+        return _appStateService.PanelFontSettings;
+    }
+
+    public bool UpdatePanelFontSettings(PanelFontSettings settings)
+    {
+        return _appStateService.SetPanelFontSettings(settings);
+    }
+
     public Task RefreshAllPortsAsync()
     {
         var refreshVersion = Interlocked.Increment(ref _refreshAllPortsVersion);

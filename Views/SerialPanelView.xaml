@@ -138,8 +138,10 @@
                      VerticalScrollBarVisibility="Auto"
                      HorizontalScrollBarVisibility="Auto"
                      AcceptsReturn="True"
-                     FontFamily="Consolas"
-                     FontSize="13"/>
+                     FontFamily="{Binding PanelTextFontFamily}"
+                     FontSize="{Binding PanelTextFontSize}"
+                     FontWeight="{Binding PanelTextFontWeight}"
+                     FontStyle="{Binding PanelTextFontStyle}"/>
 
                 <StackPanel Grid.Row="3"
                     Margin="0,0,0,6"
@@ -166,8 +168,10 @@
                           ItemsSource="{Binding SendHistory}"
                           SelectedItem="{Binding SelectedHistory, UpdateSourceTrigger=PropertyChanged}"
                           Text="{Binding SendText, UpdateSourceTrigger=PropertyChanged}"
-                          FontFamily="Consolas"
-                          FontSize="13"
+                          FontFamily="{Binding PanelTextFontFamily}"
+                          FontSize="{Binding PanelTextFontSize}"
+                          FontWeight="{Binding PanelTextFontWeight}"
+                          FontStyle="{Binding PanelTextFontStyle}"
                           IsTextSearchEnabled="False"
                           PreviewKeyDown="SendComboBox_PreviewKeyDown"/>
 

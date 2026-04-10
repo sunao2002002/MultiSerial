@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using SerialApp.Desktop.Commands;
 using SerialApp.Desktop.Models;
@@ -69,6 +70,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         _serialSession.ErrorOccurred += SerialSession_ErrorOccurred;
         _logWriter = new PanelLogWriter(panelIndex, _appStateService.LogDirectory);
         _logWriter.FilePathChanged += LogWriter_FilePathChanged;
+        _appStateService.PanelFontSettingsChanged += AppStateService_PanelFontSettingsChanged;
 
         AvailablePorts = new ObservableCollection<SerialPortOption>();
         BaudRateOptions = new ObservableCollection<int>(new[] { 9600, 115200, 460800, 921600, 1_000_000, 2_000_000, 3_000_000, 4_000_000 });
@@ -129,6 +131,14 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
     public event EventHandler<ReceiveTextChangedEventArgs>? ReceiveTextChanged;
 
     public string LogFilePath => _logWriter.FilePath;
+
+    public System.Windows.Media.FontFamily PanelTextFontFamily => new(_appStateService.PanelFontSettings.FamilyName);
+
+    public double PanelTextFontSize => _appStateService.PanelFontSettings.Size;
+
+    public System.Windows.FontWeight PanelTextFontWeight => _appStateService.PanelFontSettings.Bold ? FontWeights.Bold : FontWeights.Regular;
+
+    public System.Windows.FontStyle PanelTextFontStyle => _appStateService.PanelFontSettings.Italic ? FontStyles.Italic : FontStyles.Normal;
 
     public bool IsActive
     {
@@ -520,6 +530,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
             _serialSession.DataReceived -= SerialSession_DataReceived;
             _serialSession.ErrorOccurred -= SerialSession_ErrorOccurred;
             _logWriter.FilePathChanged -= LogWriter_FilePathChanged;
+            _appStateService.PanelFontSettingsChanged -= AppStateService_PanelFontSettingsChanged;
             await _serialSession.CloseAsync();
             _serialSession.Dispose();
             ClearPendingReceiveFrames();
@@ -732,6 +743,14 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
     private void LogWriter_FilePathChanged(object? sender, EventArgs e)
     {
         OnPropertyChanged(nameof(LogFilePath));
+    }
+
+    private void AppStateService_PanelFontSettingsChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(PanelTextFontFamily));
+        OnPropertyChanged(nameof(PanelTextFontSize));
+        OnPropertyChanged(nameof(PanelTextFontWeight));
+        OnPropertyChanged(nameof(PanelTextFontStyle));
     }
 
     private async Task CloseConnectionCoreAsync(string statusMessage, string? logMessage, DateTime timestamp, bool appendToUi)

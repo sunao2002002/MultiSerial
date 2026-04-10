@@ -57,6 +57,7 @@
                         <MenuItem Header="刷新全部串口" Click="RefreshPortsMenuItem_Click"/>
                     </MenuItem>
                     <MenuItem Header="设置">
+                        <MenuItem Header="字体设置" Click="FontSettingsMenuItem_Click"/>
                         <MenuItem Header="选择日志目录" Click="SelectLogDirectoryMenuItem_Click"/>
                         <MenuItem Header="恢复默认日志目录" Click="ResetLogDirectoryMenuItem_Click"/>
                     </MenuItem>
