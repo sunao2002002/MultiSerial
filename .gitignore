@@ -1,0 +1,38 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+
+# Visual Studio and VS Code
+.vs/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Rider / ReSharper
+.idea/
+_ReSharper*/
+*.DotSettings.user
+
+# NuGet
+packages/
+*.nupkg
+*.snupkg
+
+# Test and coverage outputs
+TestResults/
+*.coverage
+*.coveragexml
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+
+# OS generated files
+Thumbs.db
+Desktop.ini
