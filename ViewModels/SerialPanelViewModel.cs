@@ -50,7 +50,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
     private bool _showTimestamps;
     private bool _receiveAsHex;
     private bool _sendAsHex;
-    private bool _appendCrLfOnSend;
+    private bool _appendCrLfOnSend = true;
     private string _selectedPortName = string.Empty;
     private string _baudRateText = "115200";
     private int _selectedDataBits = 8;
