@@ -129,6 +129,49 @@ public partial class SerialPanelView : System.Windows.Controls.UserControl
         await viewModel.SendAsync();
     }
 
+    private void SendComboBox_DropDownOpened(object sender, EventArgs e)
+    {
+        AttachSendHistoryContextMenus();
+    }
+
+    private void DeleteSendHistoryMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.MenuItem menuItem
+            || menuItem.Parent is not System.Windows.Controls.ContextMenu { PlacementTarget: ComboBoxItem { DataContext: string historyItem } }
+            || DataContext is not SerialPanelViewModel viewModel)
+        {
+            return;
+        }
+
+        viewModel.DeleteSendHistoryItem(historyItem);
+    }
+
+    private void AttachSendHistoryContextMenus()
+    {
+        foreach (var item in SendComboBox.Items)
+        {
+            if (SendComboBox.ItemContainerGenerator.ContainerFromItem(item) is not ComboBoxItem comboBoxItem)
+            {
+                continue;
+            }
+
+            if (comboBoxItem.ContextMenu is not null)
+            {
+                continue;
+            }
+
+            var deleteMenuItem = new System.Windows.Controls.MenuItem
+            {
+                Header = "删除",
+            };
+            deleteMenuItem.Click += DeleteSendHistoryMenuItem_Click;
+
+            var contextMenu = new System.Windows.Controls.ContextMenu();
+            contextMenu.Items.Add(deleteMenuItem);
+            comboBoxItem.ContextMenu = contextMenu;
+        }
+    }
+
     private void OpenLogInNotepad()
     {
         if (DataContext is not SerialPanelViewModel viewModel)

@@ -308,6 +308,29 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         _activateCallback(this);
     }
 
+    public bool DeleteSendHistoryItem(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return false;
+        }
+
+        var removed = _appStateService.RemoveSendHistory(content);
+
+        if (!removed)
+        {
+            return false;
+        }
+
+        if (string.Equals(_selectedHistory, content, StringComparison.Ordinal))
+        {
+            _selectedHistory = null;
+            OnPropertyChanged(nameof(SelectedHistory));
+        }
+
+        return true;
+    }
+
     public Task RefreshAvailablePortsAsync(bool forceRefresh = false)
     {
         var refreshVersion = Interlocked.Increment(ref _portRefreshVersion);

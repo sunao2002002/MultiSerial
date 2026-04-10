@@ -216,7 +216,9 @@
                           FontWeight="{Binding PanelTextFontWeight}"
                           FontStyle="{Binding PanelTextFontStyle}"
                           IsTextSearchEnabled="False"
-                          PreviewKeyDown="SendComboBox_PreviewKeyDown"/>
+                          DropDownOpened="SendComboBox_DropDownOpened"
+                          PreviewKeyDown="SendComboBox_PreviewKeyDown">
+                </ComboBox>
 
                 <WrapPanel Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center">
                     <CheckBox Content="发送 Hex 模式" IsChecked="{Binding SendAsHex}"/>

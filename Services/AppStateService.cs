@@ -90,6 +90,25 @@ public sealed class AppStateService
         _ = SaveAsync();
     }
 
+    public bool RemoveSendHistory(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return false;
+        }
+
+        var existing = RecentSendHistory.FirstOrDefault(item => string.Equals(item, content, StringComparison.Ordinal));
+
+        if (existing is null)
+        {
+            return false;
+        }
+
+        RecentSendHistory.Remove(existing);
+        _ = SaveAsync();
+        return true;
+    }
+
     public bool SetPanelFontSettings(PanelFontSettings settings)
     {
         var normalizedSettings = NormalizePanelFontSettings(settings);
