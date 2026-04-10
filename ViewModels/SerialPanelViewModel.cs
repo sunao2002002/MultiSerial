@@ -34,6 +34,8 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
     private readonly PanelLogWriter _logWriter;
     private readonly SerialPortSession _serialSession;
     private StringBuilder _receiveTextBuffer = new(MaxVisibleCharacters);
+    private string? _lastUiDirection;
+    private bool _isUiLineStart = true;
     private long _pendingReceiveBytes;
     private long _droppedReceiveBytes;
     private int _isFlushRunning;
@@ -515,6 +517,8 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
     public void ClearReceiveText()
     {
         _receiveTextBuffer = new StringBuilder(MaxVisibleCharacters);
+        _lastUiDirection = null;
+        _isUiLineStart = true;
         ReceiveTextChanged?.Invoke(this, new ReceiveTextChangedEventArgs(string.Empty, replaceAll: true));
     }
 
@@ -628,6 +632,8 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         }
 
         var appendedText = new StringBuilder();
+        var currentUiDirection = _lastUiDirection;
+        var isUiLineStart = _isUiLineStart;
         var logLines = new List<string>();
         var flushedBytes = 0;
         long droppedBytes = 0;
@@ -638,7 +644,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
             flushedBytes += frame.Buffer.Length;
 
             var formattedPayload = FormatIncomingPayload(frame.Buffer);
-            appendedText.AppendLine(FormatUiLine("RX", formattedPayload, ShowTimestamps, frame.Timestamp));
+            AppendUiEntry(appendedText, ref currentUiDirection, ref isUiLineStart, "RX", formattedPayload, ShowTimestamps, frame.Timestamp);
             logLines.Add(FormatLogLine("RX", formattedPayload, frame.Timestamp));
         }
 
@@ -648,7 +654,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         {
             var warningTimestamp = DateTime.Now;
             var warning = $"接收缓存拥塞，丢弃 {droppedBytes} 字节";
-            appendedText.AppendLine(FormatUiLine("SYS", warning, ShowTimestamps, warningTimestamp));
+            AppendUiEntry(appendedText, ref currentUiDirection, ref isUiLineStart, "SYS", warning, ShowTimestamps, warningTimestamp);
             logLines.Add(FormatLogLine("SYS", warning, warningTimestamp));
         }
 
@@ -666,6 +672,8 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
 
         if (appendedText.Length > 0)
         {
+            _lastUiDirection = currentUiDirection;
+            _isUiLineStart = isUiLineStart;
             AppendReceiveText(appendedText.ToString());
         }
 
@@ -717,17 +725,73 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
 
     private void AppendUiLine(string direction, string payload, DateTime timestamp)
     {
-        AppendReceiveText(FormatUiLine(direction, payload, ShowTimestamps, timestamp) + Environment.NewLine);
+        var appendedText = new StringBuilder();
+        var currentUiDirection = _lastUiDirection;
+        var isUiLineStart = _isUiLineStart;
+        AppendUiEntry(appendedText, ref currentUiDirection, ref isUiLineStart, direction, payload, ShowTimestamps, timestamp);
+
+        if (appendedText.Length == 0)
+        {
+            return;
+        }
+
+        _lastUiDirection = currentUiDirection;
+        _isUiLineStart = isUiLineStart;
+        AppendReceiveText(appendedText.ToString());
     }
 
-    private string FormatUiLine(string direction, string payload, bool includeTimestamp, DateTime timestamp)
+    private static void AppendUiEntry(StringBuilder builder, ref string? currentDirection, ref bool isUiLineStart, string direction, string payload, bool includeTimestamp, DateTime timestamp)
+    {
+        var needsDirectionSwitch = !string.IsNullOrEmpty(currentDirection)
+            && !string.Equals(currentDirection, direction, StringComparison.Ordinal)
+            && !isUiLineStart;
+
+        if (needsDirectionSwitch)
+        {
+            builder.AppendLine();
+            isUiLineStart = true;
+        }
+
+        if (string.IsNullOrEmpty(payload))
+        {
+            AppendUiPrefix(builder, direction, includeTimestamp, timestamp);
+            currentDirection = direction;
+            isUiLineStart = false;
+            return;
+        }
+
+        for (var index = 0; index < payload.Length; index++)
+        {
+            var character = payload[index];
+
+            if (isUiLineStart && character != '\r' && character != '\n')
+            {
+                AppendUiPrefix(builder, direction, includeTimestamp, timestamp);
+                currentDirection = direction;
+                isUiLineStart = false;
+            }
+
+            builder.Append(character);
+
+            if (character == '\r' || character == '\n')
+            {
+                isUiLineStart = true;
+            }
+        }
+    }
+
+    private static void AppendUiPrefix(StringBuilder builder, string direction, bool includeTimestamp, DateTime timestamp)
     {
         if (includeTimestamp)
         {
-            return $"[{timestamp:HH:mm:ss.fff}] [{direction}] {payload}";
+            builder.Append('[');
+            builder.Append(timestamp.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture));
+            builder.Append("] ");
         }
 
-        return $"[{direction}] {payload}";
+        builder.Append('[');
+        builder.Append(direction);
+        builder.Append("] ");
     }
 
     private string FormatLogLine(string direction, string payload, DateTime timestamp)
