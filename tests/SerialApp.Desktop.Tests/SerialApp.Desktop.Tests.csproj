@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="System.IO.Ports" Version="10.0.5" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../../Models/AppPreferences.cs" Link="Source/Models/AppPreferences.cs" />
+    <Compile Include="../../Models/PanelFontSettings.cs" Link="Source/Models/PanelFontSettings.cs" />
+    <Compile Include="../../Models/SerialAdvancedSettings.cs" Link="Source/Models/SerialAdvancedSettings.cs" />
+    <Compile Include="../../Models/SerialPortOption.cs" Link="Source/Models/SerialPortOption.cs" />
+    <Compile Include="../../Models/SerialPortSettings.cs" Link="Source/Models/SerialPortSettings.cs" />
+    <Compile Include="../../Services/AppStateService.cs" Link="Source/Services/AppStateService.cs" />
+    <Compile Include="../../Services/PanelLogWriter.cs" Link="Source/Services/PanelLogWriter.cs" />
+  </ItemGroup>
+
+</Project>
