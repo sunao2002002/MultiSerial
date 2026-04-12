@@ -48,6 +48,18 @@ public sealed class PanelLogWriterTests
     }
 
     [Fact]
+    public async Task RotateDirectoryAsync_BeforeFirstWriteDoesNotCreateFile()
+    {
+        using var scope = new TestEnvironmentScope();
+        await using var writer = new PanelLogWriter(5, Path.Combine(scope.RootDirectory, "first"), "COM5");
+
+        await writer.RotateDirectoryAsync(Path.Combine(scope.RootDirectory, "second"), "COM6");
+
+        Assert.False(writer.HasActiveFile);
+        Assert.Equal(string.Empty, writer.FilePath);
+    }
+
+    [Fact]
     public async Task WriteLineAsync_InvalidRequestedDirectoryFallsBackToLocalApplicationData()
     {
         using var scope = new TestEnvironmentScope();
@@ -58,6 +70,18 @@ public sealed class PanelLogWriterTests
         var expectedPrefix = Path.Combine(scope.LocalApplicationDataDirectory, "Logs");
         Assert.StartsWith(Path.GetFullPath(expectedPrefix), writer.FilePath, StringComparison.Ordinal);
         Assert.True(File.Exists(writer.FilePath));
+    }
+
+    [Fact]
+    public async Task CloseLogFileAsync_BeforeFirstWriteLeavesWriterInactive()
+    {
+        using var scope = new TestEnvironmentScope();
+        await using var writer = new PanelLogWriter(4, Path.Combine(scope.RootDirectory, "logs"));
+
+        await writer.CloseLogFileAsync();
+
+        Assert.False(writer.HasActiveFile);
+        Assert.Equal(string.Empty, writer.FilePath);
     }
 
     [Fact]
@@ -78,5 +102,21 @@ public sealed class PanelLogWriterTests
 
         Assert.True(writer.HasActiveFile);
         Assert.NotEqual(firstPath, writer.FilePath);
+    }
+
+    [Fact]
+    public async Task WriteLineAsync_RotatesFileWhenCurrentFileWouldExceedSizeLimit()
+    {
+        using var scope = new TestEnvironmentScope();
+        var logDirectory = Path.Combine(scope.RootDirectory, "logs");
+        await using var writer = new PanelLogWriter(8, logDirectory);
+        var oversizedLine = new string('a', 10 * 1024 * 1024);
+
+        await writer.WriteLineAsync(oversizedLine);
+        var firstPath = writer.FilePath;
+        await writer.WriteLineAsync("tail");
+
+        Assert.NotEqual(firstPath, writer.FilePath);
+        Assert.Contains("tail", await File.ReadAllTextAsync(writer.FilePath), StringComparison.Ordinal);
     }
 }

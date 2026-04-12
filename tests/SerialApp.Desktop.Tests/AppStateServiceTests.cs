@@ -37,6 +37,43 @@ public sealed class AppStateServiceTests
     }
 
     [Fact]
+    public async Task Constructor_LoadsSavedPreferencesAndNormalizesMissingFontSettings()
+    {
+        using var scope = new TestEnvironmentScope();
+        Directory.CreateDirectory(scope.LocalApplicationDataDirectory);
+        var configuredDirectory = Path.Combine(scope.RootDirectory, "configured-logs");
+        var preferencesJson = """
+            {
+              "LogDirectory": "__LOG_DIR__",
+              "PanelFontSettings": null,
+              "RecentSendHistory": ["ping", "pong"]
+            }
+            """.Replace("__LOG_DIR__", configuredDirectory.Replace("\\", "\\\\", StringComparison.Ordinal), StringComparison.Ordinal);
+        await File.WriteAllTextAsync(scope.SettingsFilePath, preferencesJson);
+
+        var service = new AppStateService();
+
+        Assert.Equal(Path.GetFullPath(configuredDirectory), service.LogDirectory);
+        Assert.Equal(new[] { "ping", "pong" }, service.RecentSendHistory);
+        Assert.Equal("Consolas", service.PanelFontSettings.FamilyName);
+        Assert.Equal(13d, service.PanelFontSettings.Size);
+    }
+
+    [Fact]
+    public void Constructor_InvalidSettingsFileFallsBackToDefaults()
+    {
+        using var scope = new TestEnvironmentScope();
+        Directory.CreateDirectory(scope.LocalApplicationDataDirectory);
+        File.WriteAllText(scope.SettingsFilePath, "{ invalid json");
+
+        var service = new AppStateService();
+
+        Assert.Equal(service.DefaultLogDirectory, service.LogDirectory);
+        Assert.Empty(service.RecentSendHistory);
+        Assert.Null(service.LastWarning);
+    }
+
+    [Fact]
     public async Task SetLogDirectory_InvalidPathFallsBackToDefaultAndStoresWarning()
     {
         using var scope = new TestEnvironmentScope();
@@ -54,6 +91,17 @@ public sealed class AppStateServiceTests
 
         var saved = await LoadPreferencesAsync(scope.SettingsFilePath);
         Assert.Equal(service.DefaultLogDirectory, saved.LogDirectory);
+    }
+
+    [Fact]
+    public void SetLogDirectory_SameNormalizedDirectoryReturnsFalse()
+    {
+        using var scope = new TestEnvironmentScope();
+        var service = new AppStateService();
+        var equivalentPath = Path.Combine(service.LogDirectory, ".");
+
+        Assert.False(service.SetLogDirectory(equivalentPath));
+        Assert.Null(service.LastWarning);
     }
 
     [Fact]
@@ -92,6 +140,17 @@ public sealed class AppStateServiceTests
             Italic = true,
         }));
         Assert.Equal(1, changedCount);
+    }
+
+    [Fact]
+    public void RememberSend_IgnoresBlankValues()
+    {
+        using var scope = new TestEnvironmentScope();
+        var service = new AppStateService();
+
+        service.RememberSend("   ");
+
+        Assert.Empty(service.RecentSendHistory);
     }
 
     [Fact]

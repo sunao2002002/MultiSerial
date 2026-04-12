@@ -58,4 +58,21 @@ public sealed class ModelBehaviorTests
         Assert.False(settings.Bold);
         Assert.False(settings.Italic);
     }
+
+    [Fact]
+    public void SerialAdvancedSettings_RetainsAssignedValues()
+    {
+        var settings = new SerialAdvancedSettings
+        {
+            DataBits = 7,
+            StartBits = "1",
+            StopBits = StopBits.Two,
+            Parity = Parity.Even,
+        };
+
+        Assert.Equal(7, settings.DataBits);
+        Assert.Equal("1", settings.StartBits);
+        Assert.Equal(StopBits.Two, settings.StopBits);
+        Assert.Equal(Parity.Even, settings.Parity);
+    }
 }
