@@ -22,11 +22,7 @@ public sealed class AppStateService
 
     public AppStateService()
     {
-        var appDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "SerialApp");
-
-        Directory.CreateDirectory(appDirectory);
+        var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
 
         DefaultLogDirectory = Path.Combine(appDirectory, "Logs");
         _settingsFilePath = Path.Combine(appDirectory, "settings.json");
@@ -37,6 +33,8 @@ public sealed class AppStateService
         LastWarning = warningMessage;
         RecentSendHistory = new ObservableCollection<string>(preferences.RecentSendHistory.Take(MaxHistoryCount));
     }
+
+    public bool IsFirstRun => !File.Exists(_settingsFilePath);
 
     public string DefaultLogDirectory { get; }
 

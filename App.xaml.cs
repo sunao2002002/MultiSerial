@@ -10,8 +10,7 @@ namespace SerialApp.Desktop;
 public partial class App : System.Windows.Application
 {
 	private readonly string _startupLogPath = Path.Combine(
-		Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-		"SerialApp",
+		AppDomain.CurrentDomain.BaseDirectory,
 		"startup.log");
 
 	protected override void OnStartup(StartupEventArgs e)

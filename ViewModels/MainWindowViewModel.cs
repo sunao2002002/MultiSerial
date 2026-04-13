@@ -36,6 +36,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     public string DefaultLogDirectory => _appStateService.DefaultLogDirectory;
 
+    public bool IsFirstRun => _appStateService.IsFirstRun;
+
     public LayoutNodeViewModel RootNode
     {
         get => _rootNode;

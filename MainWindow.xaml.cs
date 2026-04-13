@@ -29,6 +29,15 @@ public partial class MainWindow : Window
         _viewModel = new MainWindowViewModel();
         DataContext = _viewModel;
         SourceInitialized += MainWindow_SourceInitialized;
+        Loaded += MainWindow_Loaded;
+    }
+
+    private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel.IsFirstRun)
+        {
+            SelectLogDirectoryMenuItem_Click(this, new RoutedEventArgs());
+        }
     }
 
     private void SplitRightMenuItem_Click(object sender, RoutedEventArgs e)
