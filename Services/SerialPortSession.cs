@@ -13,6 +13,8 @@ public sealed class SerialPortSession : IDisposable
 
     public event EventHandler<string>? ErrorOccurred;
 
+    public event EventHandler<string>? Disconnected;
+
     public bool IsOpen => _serialPort?.IsOpen == true;
 
     public Task OpenAsync(SerialPortSettings settings)
@@ -38,25 +40,39 @@ public sealed class SerialPortSession : IDisposable
 
     public Task CloseAsync()
     {
-        if (_serialPort is null)
+        var portToClose = _serialPort;
+
+        if (portToClose is null)
         {
             return Task.CompletedTask;
         }
 
+        _serialPort = null;
+
         try
         {
-            _serialPort.DataReceived -= SerialPort_DataReceived;
-            _serialPort.ErrorReceived -= SerialPort_ErrorReceived;
+            portToClose.DataReceived -= SerialPort_DataReceived;
+            portToClose.ErrorReceived -= SerialPort_ErrorReceived;
 
-            if (_serialPort.IsOpen)
+            if (portToClose.IsOpen)
             {
-                _serialPort.Close();
+                portToClose.Close();
             }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"关闭串口异常: {ex}");
         }
         finally
         {
-            _serialPort.Dispose();
-            _serialPort = null;
+            try
+            {
+                portToClose.Dispose();
+            }
+            catch
+            {
+                // Ignored
+            }
         }
 
         return Task.CompletedTask;
@@ -75,14 +91,21 @@ public sealed class SerialPortSession : IDisposable
 
     private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
     {
-        if (_serialPort is null)
+        var serialPort = _serialPort;
+
+        if (serialPort is null)
         {
             return;
         }
 
         try
         {
-            var bytesToRead = _serialPort.BytesToRead;
+            if (!serialPort.IsOpen)
+            {
+                return;
+            }
+
+            var bytesToRead = serialPort.BytesToRead;
 
             if (bytesToRead <= 0)
             {
@@ -90,7 +113,7 @@ public sealed class SerialPortSession : IDisposable
             }
 
             var buffer = new byte[bytesToRead];
-            var bytesRead = _serialPort.Read(buffer, 0, buffer.Length);
+            var bytesRead = serialPort.Read(buffer, 0, buffer.Length);
 
             if (bytesRead <= 0)
             {
@@ -107,12 +130,28 @@ public sealed class SerialPortSession : IDisposable
         catch (Exception ex)
         {
             ErrorOccurred?.Invoke(this, ex.Message);
+            _ = HandleAbruptDisconnectionAsync(ex.Message);
         }
     }
 
     private void SerialPort_ErrorReceived(object sender, SerialErrorReceivedEventArgs e)
     {
         ErrorOccurred?.Invoke(this, $"串口错误: {e.EventType}");
+
+        if (e.EventType == SerialError.RXOver || e.EventType == SerialError.Frame)
+        {
+            // Usually not fatal.
+        }
+        else
+        {
+            _ = HandleAbruptDisconnectionAsync($"串口产生严重错误: {e.EventType}");
+        }
+    }
+
+    private async Task HandleAbruptDisconnectionAsync(string reason)
+    {
+        await CloseAsync();
+        Disconnected?.Invoke(this, reason);
     }
 
     public void Dispose()

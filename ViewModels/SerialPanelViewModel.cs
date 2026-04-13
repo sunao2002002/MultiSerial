@@ -73,6 +73,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         _serialSession = new SerialPortSession();
         _serialSession.DataReceived += SerialSession_DataReceived;
         _serialSession.ErrorOccurred += SerialSession_ErrorOccurred;
+        _serialSession.Disconnected += SerialSession_Disconnected;
         _logWriter = new PanelLogWriter(panelIndex, _appStateService.LogDirectory);
         _logWriter.FilePathChanged += LogWriter_FilePathChanged;
         _appStateService.PanelFontSettingsChanged += AppStateService_PanelFontSettingsChanged;
@@ -568,6 +569,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         {
             _serialSession.DataReceived -= SerialSession_DataReceived;
             _serialSession.ErrorOccurred -= SerialSession_ErrorOccurred;
+            _serialSession.Disconnected -= SerialSession_Disconnected;
             _logWriter.FilePathChanged -= LogWriter_FilePathChanged;
             _appStateService.PanelFontSettingsChanged -= AppStateService_PanelFontSettingsChanged;
             await _serialSession.CloseAsync();
@@ -639,6 +641,31 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         _ = System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
         {
             StatusMessage = $"串口错误：{errorMessage}";
+        });
+    }
+
+    private void SerialSession_Disconnected(object? sender, string reason)
+    {
+        if (System.Windows.Application.Current is null)
+        {
+            return;
+        }
+
+        _ = System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+        {
+            await _panelOperationLock.WaitAsync();
+
+            try
+            {
+                if (IsConnected)
+                {
+                    await CloseConnectionCoreAsync($"串口已断开: {reason}", $"port disconnected: {reason}", DateTime.Now, appendToUi: true);
+                }
+            }
+            finally
+            {
+                _panelOperationLock.Release();
+            }
         });
     }
 
