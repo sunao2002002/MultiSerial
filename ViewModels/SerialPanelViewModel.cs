@@ -159,9 +159,12 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
             if (SetProperty(ref _isConnected, value))
             {
                 OnPropertyChanged(nameof(ConnectionButtonText));
+                OnPropertyChanged(nameof(CanConfigurePort));
             }
         }
     }
+
+    public bool CanConfigurePort => !IsConnected;
 
     public string ConnectionButtonText => IsConnected ? "关闭串口" : "打开串口";
 

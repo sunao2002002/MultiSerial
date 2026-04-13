@@ -108,7 +108,8 @@
                           SelectedValuePath="PortName"
                           DisplayMemberPath="DisplayName"
                           DropDownOpened="PortComboBox_DropDownOpened"
-                          SelectedValue="{Binding SelectedPortName, UpdateSourceTrigger=PropertyChanged}"/>
+                          SelectedValue="{Binding SelectedPortName, UpdateSourceTrigger=PropertyChanged}"
+                          IsEnabled="{Binding CanConfigurePort}"/>
 
                 <TextBlock Grid.Column="2" Margin="0,0,8,0" VerticalAlignment="Center" Text="波特率"/>
                 <ComboBox Grid.Column="3"
@@ -116,13 +117,15 @@
                           Margin="0,0,10,0"
                           IsEditable="True"
                           ItemsSource="{Binding BaudRateOptions}"
-                          Text="{Binding BaudRateText, UpdateSourceTrigger=PropertyChanged}"/>
+                          Text="{Binding BaudRateText, UpdateSourceTrigger=PropertyChanged}"
+                          IsEnabled="{Binding CanConfigurePort}"/>
 
                 <Button Grid.Column="4"
                         Width="80"
                         Margin="0,0,10,0"
                         Content="高级"
-                        Click="AdvancedSettingsButton_Click"/>
+                        Click="AdvancedSettingsButton_Click"
+                        IsEnabled="{Binding CanConfigurePort}"/>
 
                 <Button Grid.Column="5"
                         Width="96"
