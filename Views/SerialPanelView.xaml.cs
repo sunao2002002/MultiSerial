@@ -216,6 +216,8 @@ public partial class SerialPanelView : System.Windows.Controls.UserControl
         _boundViewModel.ReceiveTextChanged -= BoundViewModel_ReceiveTextChanged;
         _boundViewModel.PropertyChanged -= BoundViewModel_PropertyChanged;
         _boundViewModel = null;
+        ReceiveMetaTextBox.Clear();
+        ReceiveDataTextBox.Clear();
     }
 
     private void BoundViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)

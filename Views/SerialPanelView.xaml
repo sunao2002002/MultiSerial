@@ -142,7 +142,7 @@
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition x:Name="ReceiveMetaColumn" Width="90" MinWidth="68"/>
-                        <ColumnDefinition Width="5"/>
+                        <ColumnDefinition Width="2"/>
                         <ColumnDefinition Width="*" MinWidth="180"/>
                     </Grid.ColumnDefinitions>
 
@@ -150,6 +150,8 @@
                              Grid.Column="0"
                              Padding="6,4"
                              IsReadOnly="True"
+                             IsUndoEnabled="False"
+                             UndoLimit="0"
                              BorderThickness="0"
                              Background="Transparent"
                              TextWrapping="NoWrap"
@@ -162,30 +164,29 @@
                              FontStyle="{Binding PanelTextFontStyle}"/>
 
                     <GridSplitter Grid.Column="1"
-                                  Width="5"
+                                  Width="2"
                                   HorizontalAlignment="Stretch"
                                   VerticalAlignment="Stretch"
-                                  Background="{StaticResource SurfaceMutedBrush}"
+                                  Background="{StaticResource SurfaceAltBrush}"
                                   ResizeBehavior="PreviousAndNext"
                                   ShowsPreview="True"/>
 
-                    <Border Grid.Column="2"
-                            BorderThickness="1,0,0,0"
-                            BorderBrush="{StaticResource SurfaceMutedBrush}">
-                        <TextBox x:Name="ReceiveDataTextBox"
-                                 Padding="6,4"
-                                 IsReadOnly="True"
-                                 BorderThickness="0"
-                                 Background="Transparent"
-                                 TextWrapping="NoWrap"
-                                 VerticalScrollBarVisibility="Auto"
-                                 HorizontalScrollBarVisibility="Auto"
-                                 AcceptsReturn="True"
-                                 FontFamily="{Binding PanelTextFontFamily}"
-                                 FontSize="{Binding PanelTextFontSize}"
-                                 FontWeight="{Binding PanelTextFontWeight}"
-                                 FontStyle="{Binding PanelTextFontStyle}"/>
-                    </Border>
+                    <TextBox x:Name="ReceiveDataTextBox"
+                             Grid.Column="2"
+                             Padding="6,4"
+                             IsReadOnly="True"
+                             IsUndoEnabled="False"
+                             UndoLimit="0"
+                             BorderThickness="0"
+                             Background="Transparent"
+                             TextWrapping="NoWrap"
+                             VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Auto"
+                             AcceptsReturn="True"
+                             FontFamily="{Binding PanelTextFontFamily}"
+                             FontSize="{Binding PanelTextFontSize}"
+                             FontWeight="{Binding PanelTextFontWeight}"
+                             FontStyle="{Binding PanelTextFontStyle}"/>
                 </Grid>
             </Border>
 

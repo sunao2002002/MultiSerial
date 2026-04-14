@@ -34,8 +34,6 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
     private readonly PanelLogWriter _logWriter;
     private readonly SerialPortSession _serialSession;
     private readonly Queue<ReceiveDisplayChunk> _receiveDisplayChunks = new();
-    private StringBuilder _receiveMetadataBuffer = new(MaxVisibleCharacters / 2);
-    private StringBuilder _receivePayloadBuffer = new(MaxVisibleCharacters);
     private string? _lastUiDirection;
     private bool _isUiLineStart = true;
     private int _receiveDisplayCharacterCount;
@@ -550,12 +548,22 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
     public void ClearReceiveText()
     {
         _receiveDisplayChunks.Clear();
-        _receiveMetadataBuffer = new StringBuilder(MaxVisibleCharacters / 2);
-        _receivePayloadBuffer = new StringBuilder(MaxVisibleCharacters);
         _receiveDisplayCharacterCount = 0;
         _lastUiDirection = null;
         _isUiLineStart = true;
         ReceiveTextChanged?.Invoke(this, new ReceiveTextChangedEventArgs(string.Empty, string.Empty, replaceAll: true));
+    }
+
+    public PanelMemorySnapshot GetMemorySnapshot()
+    {
+        return new PanelMemorySnapshot(
+            PanelIndex,
+            IsActive,
+            IsConnected,
+            _receiveDisplayCharacterCount,
+            Volatile.Read(ref _pendingReceiveBytes),
+            Volatile.Read(ref _droppedReceiveBytes),
+            SelectedPortName);
     }
 
     public async ValueTask DisposeAsync()
@@ -619,16 +627,17 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
 
     private async void SerialSession_DataReceived(object? sender, SerialDataChunkEventArgs e)
     {
-        var pendingSize = Interlocked.Add(ref _pendingReceiveBytes, e.Buffer.Length);
+        var pendingSize = Interlocked.Add(ref _pendingReceiveBytes, e.Count);
 
         if (pendingSize > MaxPendingReceiveBytes)
         {
-            Interlocked.Add(ref _pendingReceiveBytes, -e.Buffer.Length);
-            Interlocked.Add(ref _droppedReceiveBytes, e.Buffer.Length);
+            Interlocked.Add(ref _pendingReceiveBytes, -e.Count);
+            Interlocked.Add(ref _droppedReceiveBytes, e.Count);
+            ArrayPool<byte>.Shared.Return(e.Buffer);
             return;
         }
 
-        _pendingReceiveFrames.Enqueue(new PendingReceiveFrame(e.OccurredAt, e.Buffer));
+        _pendingReceiveFrames.Enqueue(new PendingReceiveFrame(e.OccurredAt, e.Buffer, e.Count));
     }
 
     private void SerialSession_ErrorOccurred(object? sender, string errorMessage)
@@ -703,12 +712,19 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
 
         while (flushedBytes < MaxBytesPerFlush && _pendingReceiveFrames.TryDequeue(out var frame))
         {
-            Interlocked.Add(ref _pendingReceiveBytes, -frame.Buffer.Length);
-            flushedBytes += frame.Buffer.Length;
+            Interlocked.Add(ref _pendingReceiveBytes, -frame.Count);
+            flushedBytes += frame.Count;
 
-            var formattedPayload = FormatIncomingPayload(frame.Buffer);
-            AppendUiEntry(appendedMetadata, appendedPayload, ref currentUiDirection, ref isUiLineStart, "RX", formattedPayload, ShowTimestamps, frame.Timestamp);
-            logLines.Add(FormatLogLine("RX", formattedPayload, frame.Timestamp));
+            try
+            {
+                var formattedPayload = FormatIncomingPayload(frame.Buffer.AsSpan(0, frame.Count));
+                AppendUiEntry(appendedMetadata, appendedPayload, ref currentUiDirection, ref isUiLineStart, "RX", formattedPayload, ShowTimestamps, frame.Timestamp);
+                logLines.Add(FormatLogLine("RX", formattedPayload, frame.Timestamp));
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(frame.Buffer);
+            }
         }
 
         droppedBytes = Interlocked.Exchange(ref _droppedReceiveBytes, 0);
@@ -761,23 +777,35 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         return $"已连接 {portName} @ {baudRate}";
     }
 
-    private string FormatIncomingPayload(byte[] payload)
+    private string FormatIncomingPayload(ReadOnlySpan<byte> payload)
     {
-        if (ReceiveAsHex)
-        {
-            return string.Join(" ", payload.Select(value => value.ToString("X2", CultureInfo.InvariantCulture)));
-        }
-
         if (payload.Length == 0)
         {
             return string.Empty;
+        }
+
+        if (ReceiveAsHex)
+        {
+            var builder = new StringBuilder(payload.Length * 3 - 1);
+
+            for (var index = 0; index < payload.Length; index++)
+            {
+                if (index > 0)
+                {
+                    builder.Append(' ');
+                }
+
+                builder.Append(payload[index].ToString("X2", CultureInfo.InvariantCulture));
+            }
+
+            return builder.ToString();
         }
 
         var rentedChars = ArrayPool<char>.Shared.Rent(Encoding.UTF8.GetMaxCharCount(payload.Length));
 
         try
         {
-            _utf8Decoder.Convert(payload, 0, payload.Length, rentedChars, 0, rentedChars.Length, flush: false, out _, out var charsUsed, out _);
+            _utf8Decoder.Convert(payload, rentedChars, flush: false, out _, out var charsUsed, out _);
             return new string(rentedChars, 0, charsUsed);
         }
         finally
@@ -869,12 +897,12 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
 
     public string GetReceiveMetadataSnapshot()
     {
-        return _receiveMetadataBuffer.ToString();
+        return BuildReceiveSnapshot(static chunk => chunk.MetadataText, Math.Min(MaxVisibleCharacters, _receiveDisplayCharacterCount / 2 + 1024));
     }
 
     public string GetReceivePayloadSnapshot()
     {
-        return _receivePayloadBuffer.ToString();
+        return BuildReceiveSnapshot(static chunk => chunk.PayloadText, Math.Min(MaxVisibleCharacters, _receiveDisplayCharacterCount + 1024));
     }
 
     private void LogWriter_FilePathChanged(object? sender, EventArgs e)
@@ -932,8 +960,6 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         var chunk = new ReceiveDisplayChunk(metadataText, payloadText);
         _receiveDisplayChunks.Enqueue(chunk);
         _receiveDisplayCharacterCount += metadataText.Length + payloadText.Length;
-        _receiveMetadataBuffer.Append(metadataText);
-        _receivePayloadBuffer.Append(payloadText);
 
         if (_receiveDisplayCharacterCount <= MaxVisibleCharacters * 2)
         {
@@ -947,22 +973,33 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
             _receiveDisplayCharacterCount -= removedChunk.MetadataText.Length + removedChunk.PayloadText.Length;
         }
 
-        _receiveMetadataBuffer = new StringBuilder(Math.Min(MaxVisibleCharacters, _receiveDisplayCharacterCount / 2 + 1024));
-        _receivePayloadBuffer = new StringBuilder(Math.Min(MaxVisibleCharacters, _receiveDisplayCharacterCount + 1024));
+        var metadataSnapshot = BuildReceiveSnapshot(static displayChunk => displayChunk.MetadataText, Math.Min(MaxVisibleCharacters, _receiveDisplayCharacterCount / 2 + 1024));
+        var payloadSnapshot = BuildReceiveSnapshot(static displayChunk => displayChunk.PayloadText, Math.Min(MaxVisibleCharacters, _receiveDisplayCharacterCount + 1024));
+        ReceiveTextChanged?.Invoke(this, new ReceiveTextChangedEventArgs(metadataSnapshot, payloadSnapshot, replaceAll: true));
+    }
 
-        foreach (var displayChunk in _receiveDisplayChunks)
+    private string BuildReceiveSnapshot(Func<ReceiveDisplayChunk, string> selector, int capacity)
+    {
+        if (_receiveDisplayChunks.Count == 0)
         {
-            _receiveMetadataBuffer.Append(displayChunk.MetadataText);
-            _receivePayloadBuffer.Append(displayChunk.PayloadText);
+            return string.Empty;
         }
 
-        ReceiveTextChanged?.Invoke(this, new ReceiveTextChangedEventArgs(_receiveMetadataBuffer.ToString(), _receivePayloadBuffer.ToString(), replaceAll: true));
+        var builder = new StringBuilder(Math.Max(256, capacity));
+
+        foreach (var chunk in _receiveDisplayChunks)
+        {
+            builder.Append(selector(chunk));
+        }
+
+        return builder.ToString();
     }
 
     private void ClearPendingReceiveFrames()
     {
-        while (_pendingReceiveFrames.TryDequeue(out _))
+        while (_pendingReceiveFrames.TryDequeue(out var frame))
         {
+            ArrayPool<byte>.Shared.Return(frame.Buffer);
         }
 
         Interlocked.Exchange(ref _pendingReceiveBytes, 0);
@@ -1079,7 +1116,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         return buffer.ToArray();
     }
 
-    private readonly record struct PendingReceiveFrame(DateTime Timestamp, byte[] Buffer);
+    private readonly record struct PendingReceiveFrame(DateTime Timestamp, byte[] Buffer, int Count);
 
     private readonly record struct ReceiveDisplayChunk(string MetadataText, string PayloadText);
 

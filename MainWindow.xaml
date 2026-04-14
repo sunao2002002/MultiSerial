@@ -61,6 +61,12 @@
                         <MenuItem Header="选择日志目录" Click="SelectLogDirectoryMenuItem_Click"/>
                         <MenuItem Header="恢复默认日志目录" Click="ResetLogDirectoryMenuItem_Click"/>
                     </MenuItem>
+                    <MenuItem Header="诊断">
+                        <MenuItem Header="记录内存快照" Click="CaptureMemorySnapshotMenuItem_Click"/>
+                        <MenuItem Header="强制 GC 后记录" Click="CaptureCompactedMemorySnapshotMenuItem_Click"/>
+                        <Separator/>
+                        <MenuItem Header="打开快照日志" Click="OpenMemorySnapshotLogMenuItem_Click"/>
+                    </MenuItem>
                     <MenuItem Header="帮助">
                         <MenuItem Header="使用说明" Click="OpenHelpMenuItem_Click"/>
                     </MenuItem>
@@ -99,6 +105,12 @@
                            VerticalAlignment="Center"
                            FontSize="11"
                            Text="{Binding ActivePanelSummary}"/>
+                <TextBlock DockPanel.Dock="Right"
+                           Margin="10,0,0,0"
+                           VerticalAlignment="Center"
+                           FontSize="11"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           Text="{Binding LatestMemorySnapshotSummary}"/>
                 <TextBlock VerticalAlignment="Center"
                            FontSize="11"
                            TextTrimming="CharacterEllipsis"

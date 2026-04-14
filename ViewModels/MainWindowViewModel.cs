@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Threading;
@@ -15,6 +16,7 @@ namespace SerialApp.Desktop.ViewModels;
 public sealed class MainWindowViewModel : ViewModelBase
 {
     private readonly AppStateService _appStateService;
+    private readonly MemoryDiagnosticsService _memoryDiagnosticsService;
     private readonly SemaphoreSlim _deviceRefreshLock = new(1, 1);
     private LayoutNodeViewModel _rootNode;
     private SerialPanelViewModel? _activePanel;
@@ -22,10 +24,12 @@ public sealed class MainWindowViewModel : ViewModelBase
     private int _panelSequence = 1;
     private int _refreshAllPortsVersion;
     private bool _isRefreshingAllPorts;
+    private string _latestMemorySnapshotSummary = "未记录内存快照";
 
     public MainWindowViewModel()
     {
         _appStateService = new AppStateService();
+        _memoryDiagnosticsService = new MemoryDiagnosticsService(_appStateService.LogDirectory);
         _lastKnownPorts = QueryAvailablePorts(forceRefresh: true);
         var initialPanel = CreatePanel(_lastKnownPorts);
         _rootNode = initialPanel;
@@ -78,6 +82,10 @@ public sealed class MainWindowViewModel : ViewModelBase
     public int PanelCount => EnumeratePanels(RootNode).Count();
 
     public string StartupWarning => _appStateService.LastWarning ?? string.Empty;
+
+    public string LatestMemorySnapshotSummary => _latestMemorySnapshotSummary;
+
+    public string MemorySnapshotLogPath => _memoryDiagnosticsService.SnapshotFilePath;
 
     public bool IsRefreshingAllPorts
     {
@@ -163,13 +171,38 @@ public sealed class MainWindowViewModel : ViewModelBase
             await panel.RotateLogDirectoryAsync(_appStateService.LogDirectory);
         }
 
+        _memoryDiagnosticsService.UpdateLogDirectory(_appStateService.LogDirectory);
+
         OnPropertyChanged(nameof(CurrentLogDirectory));
+        OnPropertyChanged(nameof(MemorySnapshotLogPath));
         OnPropertyChanged(nameof(StartupWarning));
     }
 
     public Task ResetLogDirectoryAsync()
     {
         return UpdateLogDirectoryAsync(_appStateService.DefaultLogDirectory);
+    }
+
+    public async Task<string> CaptureMemorySnapshotAsync(bool compactBeforeCapture)
+    {
+        var panels = EnumeratePanels(RootNode)
+            .Select(panel => panel.GetMemorySnapshot())
+            .ToArray();
+        var result = await _memoryDiagnosticsService.CaptureSnapshotAsync(
+            trigger: compactBeforeCapture ? "manual-capture-compacted" : "manual-capture",
+            compactBeforeCapture,
+            panels.Length,
+            panels);
+
+        _latestMemorySnapshotSummary = result.Summary;
+        OnPropertyChanged(nameof(LatestMemorySnapshotSummary));
+        OnPropertyChanged(nameof(MemorySnapshotLogPath));
+        return result.Details;
+    }
+
+    public bool HasMemorySnapshotLog()
+    {
+        return File.Exists(MemorySnapshotLogPath);
     }
 
     public void SplitActivePanel(ControlOrientation orientation)

@@ -142,6 +142,32 @@ public partial class MainWindow : Window
         });
     }
 
+    private async void CaptureMemorySnapshotMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        await CaptureMemorySnapshotAsync(compactBeforeCapture: false);
+    }
+
+    private async void CaptureCompactedMemorySnapshotMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        await CaptureMemorySnapshotAsync(compactBeforeCapture: true);
+    }
+
+    private void OpenMemorySnapshotLogMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_viewModel.HasMemorySnapshotLog())
+        {
+            System.Windows.MessageBox.Show(this, "尚未生成内存快照日志。", "诊断", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "notepad.exe",
+            Arguments = $"\"{_viewModel.MemorySnapshotLogPath}\"",
+            UseShellExecute = true,
+        });
+    }
+
     private async void Window_Closing(object? sender, CancelEventArgs e)
     {
         if (_isShutdownComplete)
@@ -191,5 +217,28 @@ public partial class MainWindow : Window
         }
 
         return fontStyle;
+    }
+
+    private async Task CaptureMemorySnapshotAsync(bool compactBeforeCapture)
+    {
+        try
+        {
+            System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+            var details = await _viewModel.CaptureMemorySnapshotAsync(compactBeforeCapture);
+            System.Windows.MessageBox.Show(
+                this,
+                $"{details}{Environment.NewLine}{Environment.NewLine}日志: {_viewModel.MemorySnapshotLogPath}",
+                compactBeforeCapture ? "诊断 - GC 后内存快照" : "诊断 - 内存快照",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show(this, $"记录内存快照失败: {ex.Message}", "诊断", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            System.Windows.Input.Mouse.OverrideCursor = null;
+        }
     }
 }

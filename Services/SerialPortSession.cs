@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.IO.Ports;
 using System.Threading.Tasks;
 using SerialApp.Desktop.Models;
@@ -112,20 +113,34 @@ public sealed class SerialPortSession : IDisposable
                 return;
             }
 
-            var buffer = new byte[bytesToRead];
-            var bytesRead = serialPort.Read(buffer, 0, buffer.Length);
+            var buffer = ArrayPool<byte>.Shared.Rent(bytesToRead);
+            var bytesRead = 0;
 
-            if (bytesRead <= 0)
+            try
             {
-                return;
-            }
+                bytesRead = serialPort.Read(buffer, 0, bytesToRead);
 
-            if (bytesRead != buffer.Length)
+                if (bytesRead <= 0)
+                {
+                    ArrayPool<byte>.Shared.Return(buffer);
+                    return;
+                }
+
+                var handler = DataReceived;
+
+                if (handler is null)
+                {
+                    ArrayPool<byte>.Shared.Return(buffer);
+                    return;
+                }
+
+                handler.Invoke(this, new SerialDataChunkEventArgs(buffer, bytesRead, DateTime.Now));
+            }
+            catch
             {
-                Array.Resize(ref buffer, bytesRead);
+                ArrayPool<byte>.Shared.Return(buffer);
+                throw;
             }
-
-            DataReceived?.Invoke(this, new SerialDataChunkEventArgs(buffer, DateTime.Now));
         }
         catch (Exception ex)
         {
