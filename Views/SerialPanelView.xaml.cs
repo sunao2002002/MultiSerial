@@ -301,7 +301,7 @@ public partial class SerialPanelView : System.Windows.Controls.UserControl
         e.Handled = true;
     }
 
-    private void ReceiveTextBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void ReceiveTextBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         var control = e.OriginalSource as DependencyObject;
         while (control != null)

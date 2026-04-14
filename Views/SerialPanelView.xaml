@@ -162,7 +162,7 @@
                              FontSize="{Binding PanelTextFontSize}"
                              FontWeight="{Binding PanelTextFontWeight}"
                              FontStyle="{Binding PanelTextFontStyle}"
-                             PreviewMouseLeftButtonDown="ReceiveTextBox_PreviewMouseLeftButtonDown">
+                             MouseDoubleClick="ReceiveTextBox_MouseDoubleClick">
                         <TextBox.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="停止滚动" IsCheckable="True" Click="ToggleScrollMenuItem_Click" Loaded="ToggleScrollMenuItem_Loaded"/>
@@ -194,7 +194,7 @@
                              FontSize="{Binding PanelTextFontSize}"
                              FontWeight="{Binding PanelTextFontWeight}"
                              FontStyle="{Binding PanelTextFontStyle}"
-                             PreviewMouseLeftButtonDown="ReceiveTextBox_PreviewMouseLeftButtonDown">
+                             MouseDoubleClick="ReceiveTextBox_MouseDoubleClick">
                         <TextBox.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="停止滚动" IsCheckable="True" Click="ToggleScrollMenuItem_Click" Loaded="ToggleScrollMenuItem_Loaded"/>
