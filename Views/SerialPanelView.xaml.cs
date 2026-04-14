@@ -15,6 +15,28 @@ namespace SerialApp.Desktop.Views;
 
 public partial class SerialPanelView : System.Windows.Controls.UserControl
 {
+    public static readonly DependencyProperty IsScrollLockedProperty =
+        DependencyProperty.Register(
+            nameof(IsScrollLocked),
+            typeof(bool),
+            typeof(SerialPanelView),
+            new PropertyMetadata(false, OnIsScrollLockedChanged));
+
+    public bool IsScrollLocked
+    {
+        get => (bool)GetValue(IsScrollLockedProperty);
+        set => SetValue(IsScrollLockedProperty, value);
+    }
+
+    private static void OnIsScrollLockedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is SerialPanelView view && e.NewValue is false)
+        {
+            view.ReceiveMetaTextBox.ScrollToEnd();
+            view.ReceiveDataTextBox.ScrollToEnd();
+        }
+    }
+
     private SerialPanelViewModel? _boundViewModel;
     private bool _isSyncingReceiveScroll;
 
@@ -255,8 +277,11 @@ public partial class SerialPanelView : System.Windows.Controls.UserControl
             ReceiveDataTextBox.AppendText(e.PayloadText);
         }
 
-        ReceiveMetaTextBox.ScrollToEnd();
-        ReceiveDataTextBox.ScrollToEnd();
+        if (!IsScrollLocked)
+        {
+            ReceiveMetaTextBox.ScrollToEnd();
+            ReceiveDataTextBox.ScrollToEnd();
+        }
     }
 
     private void ReceiveMetaTextBox_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
@@ -274,6 +299,38 @@ public partial class SerialPanelView : System.Windows.Controls.UserControl
 
         dataScrollViewer.ScrollToVerticalOffset(Math.Max(0, nextOffset));
         e.Handled = true;
+    }
+
+    private void ReceiveTextBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var control = e.OriginalSource as DependencyObject;
+        while (control != null)
+        {
+            if (control is System.Windows.Controls.Primitives.ScrollBar)
+            {
+                return;
+            }
+
+            control = VisualTreeHelper.GetParent(control);
+        }
+
+        IsScrollLocked = !IsScrollLocked;
+    }
+
+    private void ToggleScrollMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.MenuItem menuItem)
+        {
+            IsScrollLocked = menuItem.IsChecked;
+        }
+    }
+
+    private void ToggleScrollMenuItem_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.MenuItem menuItem)
+        {
+            menuItem.IsChecked = IsScrollLocked;
+        }
     }
 
     private void ReceivePane_ScrollChanged(object sender, ScrollChangedEventArgs e)

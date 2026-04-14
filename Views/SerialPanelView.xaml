@@ -161,7 +161,14 @@
                              FontFamily="{Binding PanelTextFontFamily}"
                              FontSize="{Binding PanelTextFontSize}"
                              FontWeight="{Binding PanelTextFontWeight}"
-                             FontStyle="{Binding PanelTextFontStyle}"/>
+                             FontStyle="{Binding PanelTextFontStyle}"
+                             PreviewMouseLeftButtonDown="ReceiveTextBox_PreviewMouseLeftButtonDown">
+                        <TextBox.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="停止滚动" IsCheckable="True" Click="ToggleScrollMenuItem_Click" Loaded="ToggleScrollMenuItem_Loaded"/>
+                            </ContextMenu>
+                        </TextBox.ContextMenu>
+                    </TextBox>
 
                     <GridSplitter Grid.Column="1"
                                   Width="2"
@@ -186,7 +193,14 @@
                              FontFamily="{Binding PanelTextFontFamily}"
                              FontSize="{Binding PanelTextFontSize}"
                              FontWeight="{Binding PanelTextFontWeight}"
-                             FontStyle="{Binding PanelTextFontStyle}"/>
+                             FontStyle="{Binding PanelTextFontStyle}"
+                             PreviewMouseLeftButtonDown="ReceiveTextBox_PreviewMouseLeftButtonDown">
+                        <TextBox.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="停止滚动" IsCheckable="True" Click="ToggleScrollMenuItem_Click" Loaded="ToggleScrollMenuItem_Loaded"/>
+                            </ContextMenu>
+                        </TextBox.ContextMenu>
+                    </TextBox>
                 </Grid>
             </Border>
 
