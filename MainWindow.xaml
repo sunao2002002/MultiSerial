@@ -44,11 +44,37 @@
                                FontWeight="SemiBold"/>
                 </StackPanel>
 
-                <Menu DockPanel.Dock="Right"
-                      HorizontalAlignment="Right"
-                      VerticalAlignment="Center">
-                    <MenuItem Header="面板">
-                        <MenuItem Header="在右侧新增" Click="SplitRightMenuItem_Click"/>
+                <!-- 菜单和置顶按钮 -->
+                <StackPanel DockPanel.Dock="Right"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center">
+                    <ToggleButton x:Name="TopmostToggle"
+                                  Margin="0,0,10,0"
+                                  Padding="8,4"
+                                  BorderThickness="0"
+                                  Background="Transparent"
+                                  Cursor="Hand"
+                                  IsChecked="{Binding Topmost, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="📌" Margin="0,0,4,0"/>
+                            <TextBlock>
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="置顶"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsChecked, ElementName=TopmostToggle}" Value="True">
+                                                <Setter Property="Text" Value="取消置顶"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
+                    </ToggleButton>
+                    <Menu>
+                        <MenuItem Header="面板">
+                            <MenuItem Header="在右侧新增" Click="SplitRightMenuItem_Click"/>
                         <MenuItem Header="在下方新增" Click="SplitDownMenuItem_Click"/>
                         <Separator/>
                         <MenuItem Header="关闭当前" Click="CloseCurrentMenuItem_Click"/>
@@ -74,6 +100,7 @@
                         <MenuItem Header="退出" Click="ExitMenuItem_Click"/>
                     </MenuItem>
                 </Menu>
+                </StackPanel>
             </DockPanel>
         </Border>
 
