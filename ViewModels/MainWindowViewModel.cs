@@ -30,10 +30,12 @@ public sealed class MainWindowViewModel : ViewModelBase
     {
         _appStateService = new AppStateService();
         _memoryDiagnosticsService = new MemoryDiagnosticsService(_appStateService.LogDirectory);
-        _lastKnownPorts = QueryAvailablePorts(forceRefresh: true);
+        
         var initialPanel = CreatePanel(_lastKnownPorts);
         _rootNode = initialPanel;
         ActivatePanel(initialPanel);
+
+        _ = RefreshAllPortsAsync();
     }
 
     public string CurrentLogDirectory => _appStateService.LogDirectory;
@@ -355,10 +357,5 @@ public sealed class MainWindowViewModel : ViewModelBase
     private static Task<SerialPortOption[]> QueryAvailablePortsAsync(bool forceRefresh = false)
     {
         return Task.Run(() => SerialPortCatalogService.GetAvailablePorts(forceRefresh));
-    }
-
-    private static SerialPortOption[] QueryAvailablePorts(bool forceRefresh = false)
-    {
-        return SerialPortCatalogService.GetAvailablePorts(forceRefresh);
     }
 }
