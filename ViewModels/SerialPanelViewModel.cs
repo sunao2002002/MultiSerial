@@ -45,7 +45,6 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
     private bool _isActive;
     private bool _isConnected;
     private bool _isRefreshingPorts;
-    private bool _showTimestamps;
     private bool _receiveAsHex;
     private bool _sendAsHex;
     private bool _appendCrLfOnSend = true;
@@ -75,6 +74,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         _logWriter = new PanelLogWriter(panelIndex, _appStateService.LogDirectory);
         _logWriter.FilePathChanged += LogWriter_FilePathChanged;
         _appStateService.PanelFontSettingsChanged += AppStateService_PanelFontSettingsChanged;
+        _appStateService.ShowTimestampsChanged += AppStateService_ShowTimestampsChanged;
 
         AvailablePorts = new ObservableCollection<SerialPortOption>();
         BaudRateOptions = new ObservableCollection<int>(new[] { 9600, 115200, 460800, 921600, 1_000_000, 2_000_000, 3_000_000, 4_000_000 });
@@ -173,17 +173,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         private set => SetProperty(ref _isRefreshingPorts, value);
     }
 
-    public bool ShowTimestamps
-    {
-        get => _showTimestamps;
-        set
-        {
-            if (SetProperty(ref _showTimestamps, value))
-            {
-                OnPropertyChanged(nameof(ShowTimestamps));
-            }
-        }
-    }
+    public bool ShowTimestamps => _appStateService.ShowTimestamps;
 
     public bool ReceiveAsHex
     {
@@ -487,6 +477,8 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
             await _logWriter.RotateDirectoryAsync(_appStateService.LogDirectory, settings.PortName);
             await _serialSession.OpenAsync(settings);
             IsConnected = true;
+            ClearPendingReceiveFrames();
+            ClearReceiveText();
             _utf8Decoder.Reset();
             StatusMessage = GetConnectedStatus(settings.PortName, settings.BaudRate.ToString(CultureInfo.InvariantCulture));
             await TryWriteLogAsync("SYS", $"port opened {settings.PortName} @ {settings.BaudRate}", DateTime.Now);
@@ -580,6 +572,7 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
             _serialSession.Disconnected -= SerialSession_Disconnected;
             _logWriter.FilePathChanged -= LogWriter_FilePathChanged;
             _appStateService.PanelFontSettingsChanged -= AppStateService_PanelFontSettingsChanged;
+            _appStateService.ShowTimestampsChanged -= AppStateService_ShowTimestampsChanged;
             await _serialSession.CloseAsync();
             _serialSession.Dispose();
             ClearPendingReceiveFrames();
@@ -916,6 +909,11 @@ public sealed class SerialPanelViewModel : LayoutNodeViewModel, IAsyncDisposable
         OnPropertyChanged(nameof(PanelTextFontSize));
         OnPropertyChanged(nameof(PanelTextFontWeight));
         OnPropertyChanged(nameof(PanelTextFontStyle));
+    }
+
+    private void AppStateService_ShowTimestampsChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(ShowTimestamps));
     }
 
     private async Task CloseConnectionCoreAsync(string statusMessage, string? logMessage, DateTime timestamp, bool appendToUi)

@@ -19,6 +19,7 @@ public sealed class AppStateService
     private readonly string _settingsFilePath;
     private string _logDirectory;
     private PanelFontSettings _panelFontSettings;
+    private bool _showTimestamps;
 
     public AppStateService()
     {
@@ -30,6 +31,7 @@ public sealed class AppStateService
         var preferences = LoadPreferences();
         _logDirectory = ResolveWritableDirectory(preferences.LogDirectory, out var warningMessage);
         _panelFontSettings = NormalizePanelFontSettings(preferences.PanelFontSettings);
+        _showTimestamps = preferences.ShowTimestamps;
         LastWarning = warningMessage;
         RecentSendHistory = new ObservableCollection<string>(preferences.RecentSendHistory.Take(MaxHistoryCount));
     }
@@ -47,6 +49,23 @@ public sealed class AppStateService
     public event EventHandler? PanelFontSettingsChanged;
 
     public PanelFontSettings PanelFontSettings => ClonePanelFontSettings(_panelFontSettings);
+
+    public bool ShowTimestamps => _showTimestamps;
+
+    public bool SetShowTimestamps(bool value)
+    {
+        if (_showTimestamps == value)
+        {
+            return false;
+        }
+
+        _showTimestamps = value;
+        _ = SaveAsync();
+        ShowTimestampsChanged?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    public event EventHandler? ShowTimestampsChanged;
 
     public bool SetLogDirectory(string directory)
     {
@@ -151,6 +170,7 @@ public sealed class AppStateService
         {
             LogDirectory = _logDirectory,
             PanelFontSettings = ClonePanelFontSettings(_panelFontSettings),
+            ShowTimestamps = _showTimestamps,
             RecentSendHistory = RecentSendHistory.ToList(),
         };
 

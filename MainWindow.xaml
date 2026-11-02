@@ -87,6 +87,11 @@
                             </TextBlock>
                         </StackPanel>
                     </ToggleButton>
+                    <CheckBox Content="接收时间戳"
+                              Margin="0,0,10,0"
+                              VerticalAlignment="Center"
+                              Cursor="Hand"
+                              IsChecked="{Binding ShowTimestamps}"/>
                     <Menu>
                         <MenuItem Header="面板">
                             <MenuItem Header="在右侧新增" Click="SplitRightMenuItem_Click"/>

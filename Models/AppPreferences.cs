@@ -6,5 +6,7 @@ public sealed class AppPreferences
 
     public PanelFontSettings PanelFontSettings { get; set; } = new();
 
+    public bool ShowTimestamps { get; set; }
+
     public List<string> RecentSendHistory { get; set; } = new();
 }

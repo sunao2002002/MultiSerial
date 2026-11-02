@@ -105,6 +105,18 @@ public sealed class MainWindowViewModel : ViewModelBase
         return _appStateService.SetPanelFontSettings(settings);
     }
 
+    public bool ShowTimestamps
+    {
+        get => _appStateService.ShowTimestamps;
+        set
+        {
+            if (_appStateService.SetShowTimestamps(value))
+            {
+                OnPropertyChanged();
+            }
+        }
+    }
+
     public Task RefreshAllPortsAsync()
     {
         var refreshVersion = Interlocked.Increment(ref _refreshAllPortsVersion);

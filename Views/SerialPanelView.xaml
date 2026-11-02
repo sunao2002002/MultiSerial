@@ -208,7 +208,6 @@
                         Margin="0,0,0,6"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right">
-                <CheckBox Content="接收时间戳" IsChecked="{Binding ShowTimestamps}"/>
                 <CheckBox Content="接收 Hex 显示" IsChecked="{Binding ReceiveAsHex}"/>
                 <Button Width="88"
                         Content="清空接收"
