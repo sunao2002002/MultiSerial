@@ -49,6 +49,21 @@
                             Orientation="Horizontal"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Center">
+                    <Button x:Name="ClearAllReceiveIconButton"
+                            Width="32"
+                            Height="28"
+                            Margin="0,0,10,0"
+                            Padding="0"
+                            BorderThickness="0"
+                            Background="Transparent"
+                            Cursor="Hand"
+                            ToolTip="一键清空全部 Panel 接收窗口"
+                            Click="ClearAllReceiveWindowsMenuItem_Click">
+                        <TextBlock Text="🧹"
+                                   FontSize="14"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Button>
                     <ToggleButton x:Name="TopmostToggle"
                                   Margin="0,0,10,0"
                                   Padding="8,4"

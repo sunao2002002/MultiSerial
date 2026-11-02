@@ -65,6 +65,11 @@ public partial class MainWindow : Window
         await _viewModel.RefreshAllPortsAsync();
     }
 
+    private void ClearAllReceiveWindowsMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.ClearAllPanelsReceiveText();
+    }
+
     private async void SelectLogDirectoryMenuItem_Click(object sender, RoutedEventArgs e)
     {
         using var dialog = new FolderBrowserDialog

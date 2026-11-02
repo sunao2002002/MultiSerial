@@ -265,6 +265,14 @@ public sealed class MainWindowViewModel : ViewModelBase
         await _appStateService.FlushAsync();
     }
 
+    public void ClearAllPanelsReceiveText()
+    {
+        foreach (var panel in EnumeratePanels(RootNode))
+        {
+            panel.ClearReceiveText();
+        }
+    }
+
     public void ActivatePanel(SerialPanelViewModel panel)
     {
         foreach (var candidate in EnumeratePanels(RootNode))
